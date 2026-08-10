@@ -1,0 +1,16 @@
+/* Piece-set CSS for chessground, generated from the SVGs in static/pieces/maestro/.
+   Selectors target chessground's `.cg-wrap piece.<role>.<color>` DOM/class
+   model; swapping this stylesheet's <link href> is how board.js's
+   reconstruct() switches piece sets without rebuilding the board. */
+.cg-wrap piece.pawn.white { background-image: url('/static/pieces/maestro/wP.svg'); }
+.cg-wrap piece.knight.white { background-image: url('/static/pieces/maestro/wN.svg'); }
+.cg-wrap piece.bishop.white { background-image: url('/static/pieces/maestro/wB.svg'); }
+.cg-wrap piece.rook.white { background-image: url('/static/pieces/maestro/wR.svg'); }
+.cg-wrap piece.queen.white { background-image: url('/static/pieces/maestro/wQ.svg'); }
+.cg-wrap piece.king.white { background-image: url('/static/pieces/maestro/wK.svg'); }
+.cg-wrap piece.pawn.black { background-image: url('/static/pieces/maestro/bP.svg'); }
+.cg-wrap piece.knight.black { background-image: url('/static/pieces/maestro/bN.svg'); }
+.cg-wrap piece.bishop.black { background-image: url('/static/pieces/maestro/bB.svg'); }
+.cg-wrap piece.rook.black { background-image: url('/static/pieces/maestro/bR.svg'); }
+.cg-wrap piece.queen.black { background-image: url('/static/pieces/maestro/bQ.svg'); }
+.cg-wrap piece.king.black { background-image: url('/static/pieces/maestro/bK.svg'); }

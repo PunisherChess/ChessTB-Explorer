@@ -1,0 +1,58 @@
+# ChessTB Explorer — Python dependencies
+# ---------------------------------------------------------------------------
+# Install into a virtual environment with:
+#
+#   python -m venv .venv
+#   source .venv/bin/activate        # Windows: .venv\Scripts\activate
+#   pip install -r requirements.txt
+#
+# Python 3.10+ is required (app.py uses PEP 604 "X | Y" union syntax and
+# modern typing / dataclass features throughout).
+# ---------------------------------------------------------------------------
+
+# --- Web framework -----------------------------------------------------
+Flask>=3.0,<4.0
+
+# --- Production WSGI server ----------------------------------------------
+# app.py serves via waitress by default (config.py's DEBUG = False);
+# Flask's own dev server is only used when DEBUG = True. See README.md
+# "Running in production".
+waitress>=3.0,<4.0
+
+# --- Chess move generation + ChessTB tablebase probing ------------------
+# IMPORTANT: Do NOT run `pip install chess` on its own — always install
+# the fork below instead. Plain PyPI `chess` doesn't contain the
+# `chess.chesstb` module app.py imports at startup, so plain `chess` fails
+# immediately with "ModuleNotFoundError: No module named 'chess.chesstb'".
+#
+# This project requires noobpwnftw's fork of python-chess, built
+# specifically to add ChessTB tablebase support (WDL / DTZ / DTM / DTM50
+# probing via chess.chesstb.open_tablebase()). Install it directly from
+# the `add-chesstb-tablebases` branch on GitHub:
+#
+#   Repository: https://github.com/noobpwnftw/python-chess
+#   Branch:     add-chesstb-tablebases
+#
+# If you already have this fork checked out locally (e.g. as a sibling
+# directory or git submodule), you can instead comment out the line below
+# and install it in editable mode:
+#   pip install -e ../python-chess
+chess @ git+https://github.com/noobpwnftw/python-chess.git@add-chesstb-tablebases
+
+# --- Fast LZ4 decompression for WDL tables -------------------------------
+# ChessTB WDL tables are LZ4-compressed; chess.chesstb decompresses them
+# via this C-accelerated package, which is faster than a pure-Python
+# decoder and, since the C implementation releases the GIL during
+# decompression, lets PROBE_THREADS worker threads decode different WDL
+# blocks in true parallel.
+lz4>=4.0,<5.0
+
+# --- HTTP client for a remote (URL) TABLEBASE_PATH ------------------------
+# Used by remote/remote_source.py and remote/remote_fallback.py (see
+# README.md → "Getting the tablebase files") to support pointing
+# TABLEBASE_PATH at an http(s):// URL instead of a local directory — see
+# that section for how. Only imported at the point a remote TABLEBASE_PATH
+# is actually opened — a local-directory TABLEBASE_PATH never touches it,
+# so it's safe to leave installed regardless of whether you use remote
+# tablebases.
+requests>=2.31,<3.0

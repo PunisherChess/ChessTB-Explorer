@@ -1,0 +1,241 @@
+openapi: "3.0.3"
+info:
+  title: ChessTB Explorer API
+  version: "1.0.0"
+  description: |
+    Chess endgame tablebase probe API.
+    Submit a FEN position and receive ranked move lists for Distance to Conversion (DTC),
+    Distance to Mate (DTM), and DTM under the 50-move rule (DTM50).
+
+paths:
+  /probe:
+    post:
+      operationId: probePosition
+      summary: Probe a chess position (buffered response)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbeRequest"
+            example:
+              fen: "4k3/8/8/8/8/8/8/4K2R w - - 0 1"
+      responses:
+        "200":
+          description: Successful probe
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResponse"
+        "400":
+          description: Invalid FEN, empty body, or missing tablebase coverage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request body exceeds 4 KB limit
+        "502":
+          description: >-
+            Remote (URL) TABLEBASE_PATH only: the tablebase's HTTP source
+            couldn't be reached for this probe. Retrying may succeed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Tablebase not initialised (TABLEBASE_PATH unset or failed to load)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+
+  /probe/stream:
+    post:
+      operationId: probePositionStream
+      summary: Probe a chess position with SSE streaming progress
+      description: |
+        Identical to /probe but returns text/event-stream.
+        Each SSE event has a JSON payload in its data field.
+        Events are emitted as child positions are probed, followed by the
+        final result or an error event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbeRequest"
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ProgressEvent"
+                  - $ref: "#/components/schemas/DoneEvent"
+                  - $ref: "#/components/schemas/ErrorEvent"
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Tablebase readiness check
+      responses:
+        "200":
+          description: Tablebase loaded and ready
+        "503":
+          description: Tablebase not initialised
+
+  /admin/cache/stats:
+    get:
+      operationId: cacheStats
+      summary: LRU cache hit-rate statistics
+      responses:
+        "200":
+          description: Cache statistics
+
+  /admin/cache/clear:
+    post:
+      operationId: cacheClear
+      summary: Purge both LRU caches
+      responses:
+        "200":
+          description: Caches cleared
+
+components:
+  schemas:
+    ProbeRequest:
+      type: object
+      required: [fen]
+      properties:
+        fen:
+          type: string
+          description: >-
+            FEN notation (4–6 fields; shorter forms are auto-padded). The
+            castling-availability field must be "-": the loaded tablebases
+            are generated on the assumption that neither side retains the
+            right to castle, so any other value is rejected with a 400
+            response.
+          example: "4k3/8/8/8/8/8/8/4K2R w - - 0 1"
+
+    MoveEntry:
+      type: object
+      properties:
+        san:
+          type: string
+          description: Standard Algebraic Notation of the move
+        plies:
+          type: integer
+          description: >-
+            Distance in plies. 1 for a move that delivers immediate
+            checkmate (the move itself is the mate); 0 for a move that
+            ends the game immediately as a draw (stalemate or
+            insufficient material) and for an unprobed/unknown move.
+        is_mate:
+          type: boolean
+          description: True if this move delivers immediate checkmate
+        outcome:
+          type: string
+          enum: [win, cursed_win, draw, blessed_loss, loss, unknown]
+        child_fen:
+          type: string
+          nullable: true
+          description: FEN of the position after this move; null for terminal positions
+        draw_reason:
+          type: string
+          nullable: true
+          enum: [stalemate, insufficient_material, null]
+          description: Reason for a draw outcome that ends the game immediately; null otherwise
+
+    Summary:
+      type: object
+      description: Outcome distribution across all legal moves
+      properties:
+        wins:    {type: integer}
+        draws:   {type: integer}
+        losses:  {type: integer}
+        unknown: {type: integer}
+
+    ProbeResponse:
+      type: object
+      properties:
+        wdl:
+          type: integer
+          enum: [-2, -1, 0, 1, 2]
+          description: Root position WDL (2=win, 1=cursed win, 0=draw, -1=blessed loss, -2=loss)
+        dtz:
+          type: integer
+          description: Distance to Zero (distance to conversion) in plies
+        dtm:
+          type: integer
+          description: Distance to Mate in plies
+        dtm50:
+          type: array
+          items: {type: integer}
+          minItems: 2
+          maxItems: 2
+          description: "[wdl_under_50move_rule, plies_to_mate_under_50move_rule]"
+        draw_reason:
+          type: string
+          nullable: true
+          enum: [stalemate, insufficient_material, null]
+          description: Reason the root position itself is an immediate draw; null otherwise
+        moves_dtz:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoveEntry"
+          description: All legal moves ranked by Distance to Conversion (best first)
+        moves_dtm:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoveEntry"
+          description: All legal moves ranked by Distance to Mate (best first)
+        moves_dtm50:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoveEntry"
+          description: All legal moves ranked by DTM under the 50-move rule (best first)
+        summary:
+          $ref: "#/components/schemas/Summary"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        error_code:
+          type: string
+          enum: [missing_table, remote_unavailable]
+          description: >-
+            Machine-readable error code (only present for specific errors).
+            remote_unavailable only occurs with a remote (URL)
+            TABLEBASE_PATH, when its HTTP source couldn't be reached.
+        piece_count:
+          type: integer
+          nullable: true
+          description: Number of pieces on the board (only when error_code=missing_table)
+
+    ProgressEvent:
+      type: object
+      properties:
+        status: {type: string, enum: [probing]}
+        completed: {type: integer}
+        total: {type: integer}
+
+    DoneEvent:
+      allOf:
+        - $ref: "#/components/schemas/ProbeResponse"
+        - type: object
+          properties:
+            status: {type: string, enum: [done]}
+
+    ErrorEvent:
+      type: object
+      properties:
+        status: {type: string, enum: [error]}
+        error: {type: string}
+        error_code: {type: string, enum: [missing_table, remote_unavailable]}
+        piece_count: {type: integer, nullable: true}

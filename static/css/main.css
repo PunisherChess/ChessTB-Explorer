@@ -1,0 +1,1640 @@
+/* ============================================================
+   main.css — ChessTB Explorer  (v2 revised)
+   ============================================================ */
+
+/* ── CSS custom properties ─────────────────────────────────────────── */
+@font-face {
+    font-family: 'Inter';
+    src: url('../vendor/fonts/Inter-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url('../vendor/fonts/Inter-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url('../vendor/fonts/Inter-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../vendor/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'JetBrains Mono';
+    src: url('../vendor/fonts/JetBrainsMono-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    /* Backgrounds */
+    --bg:           #0e0d0c;
+    --surface:      #161513;
+    --surface-2:    #1d1b18;
+    --surface-3:    #252320;
+
+    /* Borders */
+    --border:       #2c2a27;
+    --border-2:     #3d3a36;
+
+    /* Text */
+    --text:         #e8e4de;
+    --text-dim:     #7a766f;
+    --text-muted:   #4a4642;
+
+    /* Spare-piece tray — warm beige matching board light squares */
+    --tray-bg:      #b0a998;
+    --tray-bg-dark: #726a5a;
+    --tray-border:  #8a8070;
+
+    /* Accent */
+    --gold:         #c89b3c;
+    --gold-dim:     #7a5e22;
+    --gold-glow:    rgba(200, 155, 60, 0.14);
+
+    /* Outcome colours */
+    --win:          #4ade80;
+    --loss:         #f87171;
+    --loss-glow:    rgba(248, 113, 113, 0.14);
+    --draw:         #94a3b8;
+    --amber:        #d9a441;
+    --blue:         #60a5fa;
+
+    /* Typography */
+    --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+    /* Radii / timing */
+    --r-sm: 4px;
+    --r-md: 6px;
+    --r-lg: 8px;
+    --tr:   0.14s ease;
+    --shadow: 0 8px 30px rgba(0,0,0,.55);
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Fix body to viewport — no page-level scroll */
+html, body { height: 100%; }
+body {
+    height: 100vh;
+    overflow: hidden;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+}
+
+button { cursor: pointer; font: inherit; }
+a      { color: var(--text-dim); text-decoration: none; }
+a:hover { color: var(--text); }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ── Site header ────────────────────────────────────────────────────── */
+.site-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 48px;
+    padding: 0 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    user-select: none;
+}
+.site-header__logo  { font-size: 18px; line-height: 1; flex-shrink: 0; }
+.site-header__title {
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text);
+}
+.site-header__sep { color: var(--text-muted); font-size: 12px; }
+.site-header__sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+.site-header__nav   { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+.site-header__link  {
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    border: none;
+    background: none;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-dim);
+    transition: background var(--tr), color var(--tr);
+    white-space: nowrap;
+}
+.site-header__link:hover { background: var(--surface-2); color: var(--text); }
+.site-header__link--icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+}
+.site-header__link--icon svg { opacity: 0.85; }
+.site-header__link--icon:hover svg { opacity: 1; }
+
+/* ── Settings panel ─────────────────────────────────────────────────── */
+/* Dropdown anchored under the header, flush with the right edge.
+   top: 48px = header height. z-index sits above page content and the
+   toast layer's stacking context but below the promotion/PGN dialogs. */
+.settings-panel {
+    display: none;
+    position: fixed;
+    top: 48px;
+    right: 0;
+    width: 300px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-right: none;
+    border-radius: 0 0 0 var(--r-lg);
+    box-shadow: -6px 10px 32px rgba(0, 0, 0, 0.6);
+    z-index: 150;
+    color: var(--text);
+}
+.settings-panel.is-open { display: block; }
+
+.settings-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 10px 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+}
+.settings-panel__title {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--text);
+}
+
+/* ── Accordion rows ─────────────────────────────────────────────────── */
+.settings-row { border-bottom: 1px solid var(--border); }
+.settings-row:last-child { border-bottom: none; }
+
+.settings-row__header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 14px 13px 16px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--tr);
+    user-select: none;
+}
+.settings-row__header:hover { background: var(--surface-2); }
+
+.settings-row__chevron {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: transform 0.2s ease, color var(--tr);
+}
+.settings-row__header:hover .settings-row__chevron { color: var(--text-dim); }
+.settings-row.is-open .settings-row__chevron { transform: rotate(180deg); }
+
+.settings-row__body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.25s ease;
+}
+.settings-row.is-open .settings-row__body { max-height: 340px; }
+
+/* ── Theme option grid — shared by Board and Piece Set rows ───────────
+   Board thumbnails are the actual board image file (theme.js's
+   `boardImage`, e.g. /static/boards/wood4.jpg) scaled down by object-fit
+   here — there is no separate thumbnail asset. Colour-mode boards (no
+   image file) render as a two-tone diagonal swatch instead. */
+.theme-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 12px;
+}
+.theme-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    background: none;
+    border: 2px solid transparent;
+    border-radius: var(--r-md);
+    padding: 4px;
+    cursor: pointer;
+    transition: border-color var(--tr), background var(--tr);
+}
+.theme-option:hover { background: var(--surface-2); border-color: var(--border-2); }
+.theme-option.is-active { border-color: var(--gold); background: var(--gold-glow); }
+
+.theme-option__swatch {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 3px;
+    overflow: hidden;
+    display: block;
+    background: var(--surface-3);
+}
+.theme-option__swatch img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+    user-select: none;
+}
+.theme-option__swatch--colour { border: 1px solid var(--border-2); }
+.theme-option__swatch--piece {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-2);
+}
+.theme-option__swatch--piece img {
+    width: 70%;
+    height: 70%;
+    object-fit: contain;
+}
+
+.theme-option__label {
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-align: center;
+    line-height: 1.3;
+    pointer-events: none;
+    user-select: none;
+}
+.theme-option.is-active .theme-option__label { color: var(--gold); }
+
+/* ── Settings toggle row (Show Root Row) ──────────────────────────────
+   Plain flex row, not an accordion — no header/body/chevron pattern
+   here, just a label + slider switch. Reuses .settings-row for the
+   shared border-bottom/last-child treatment. */
+.settings-row--toggle { padding: 12px 14px 12px 16px; }
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+.settings-toggle__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* Tiny pill/slider switch — track + circular knob, knob travels via
+   transform on :checked. Sized to sit comfortably in a 300px-wide
+   settings panel row alongside its label. */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.toggle-switch__input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.toggle-switch__track {
+    position: absolute;
+    inset: 0;
+    background: var(--surface-3);
+    border: 1px solid var(--border-2);
+    border-radius: 999px;
+    transition: background var(--tr), border-color var(--tr);
+    pointer-events: none;
+}
+.toggle-switch__track::before {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: transform var(--tr), background var(--tr);
+}
+.toggle-switch__input:checked + .toggle-switch__track {
+    background: var(--gold-glow);
+    border-color: var(--gold-dim);
+}
+.toggle-switch__input:checked + .toggle-switch__track::before {
+    transform: translateX(14px);
+    background: var(--gold);
+}
+.toggle-switch__input:focus-visible + .toggle-switch__track {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+/* ── Settings slider row (Autoplay Delay) ─────────────────────────────
+   Same standalone-row treatment as the toggle row above (label + control,
+   no header/body/chevron), but laid out as a single line: label on the
+   left, the range input filling the middle, and the current value on the
+   right — matching the row height every other settings row uses. The
+   tick labels are positioned out of normal flow beneath the track (see
+   .range-slider__ticks below) so the row centers the label against the
+   track's own box, not against a taller track-plus-ticks cluster. */
+.settings-row--slider {
+    padding: 13px 14px 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.settings-slider__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex-shrink: 0;
+}
+.settings-slider__control {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.settings-slider__value {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--gold);
+    flex-shrink: 0;
+}
+
+/* Continuous range input — track and thumb restyled to match the toggle
+   switch's gold-on-dark language. min/max/step (0–2500ms, step 50ms) give
+   a fine-grained continuous feel; ui.js reads/writes the millisecond
+   value directly (see _AUTO_PLAY_DELAY_DEFAULT_MS / _autoPlayDelayMs).
+   The track's filled portion is driven by the --range-fill custom
+   property (a percentage), which ui.js keeps in sync with the current
+   value via _syncAutoPlayDelaySlider() — custom properties inherit into
+   pseudo-elements, so setting it on the input itself reaches the
+   vendor-prefixed track pseudo-elements below. The thumb is a target/
+   bullseye mark rather than a flat dot: background and border are both
+   --gold, then an inset box-shadow the same width as the border paints a
+   --surface ring between them — matching the settings panel's own
+   background so the ring reads as a gap punched through the gold rather
+   than a separately-colored layer — leaving a small solid --gold center. */
+.range-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    width: 100%;
+    height: 16px;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+}
+.range-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(to right,
+        var(--gold) var(--range-fill, 0%), var(--surface-3) var(--range-fill, 0%));
+    border: 1px solid var(--border-2);
+}
+.range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    width: 16px;
+    height: 16px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: 3px solid var(--gold);
+    box-shadow: inset 0 0 0 3px var(--surface);
+    transition: border-color var(--tr);
+}
+.range-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(to right,
+        var(--gold) var(--range-fill, 0%), var(--surface-3) var(--range-fill, 0%));
+    border: 1px solid var(--border-2);
+}
+.range-slider::-moz-range-thumb {
+    box-sizing: border-box;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--gold);
+    border: 3px solid var(--gold);
+    box-shadow: inset 0 0 0 3px var(--surface);
+    transition: border-color var(--tr);
+}
+.range-slider:hover::-webkit-slider-thumb,
+.range-slider:hover::-moz-range-thumb { border-color: var(--gold-dim); }
+.range-slider:focus-visible { outline: none; }
+.range-slider:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+.range-slider:focus-visible::-moz-range-thumb {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+.range-slider__ticks {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 1px;
+    margin-top: 1px;
+}
+.range-slider__ticks span {
+    font-size: 8px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+@media (max-width: 640px) {
+    .settings-panel { width: 100vw; border-radius: 0; }
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────── */
+.content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    padding: 18px 32px;
+    height: calc(100vh - 48px);
+    max-width: 1540px;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+/* ── Left column ────────────────────────────────────────────────────── */
+.left-col {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    width: 360px;
+    flex-shrink: 0;
+    height: 100%;
+}
+
+/* ── FEN block ──────────────────────────────────────────────────────── */
+.fen-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.fen-input-wrap { position: relative; width: 100%; }
+.fen-input-wrap__label {
+    position: absolute;
+    left: 10px; top: 50%;
+    transform: translateY(-50%);
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-muted);
+    pointer-events: none; user-select: none; z-index: 1;
+}
+.fen-input {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px 0 36px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    outline: none;
+    letter-spacing: 0.02em;
+    transition: border-color var(--tr), box-shadow var(--tr);
+}
+.fen-input:focus { border-color: var(--gold-dim); box-shadow: 0 0 0 2px var(--gold-glow); }
+.fen-input::placeholder { color: var(--text-muted); font-size: 10.5px; }
+.fen-input.is-invalid {
+    border-color: var(--loss) !important;
+    box-shadow: 0 0 0 2px rgba(248,113,113,0.15) !important;
+}
+
+/* ── Action buttons ─────────────────────────────────────────────────── */
+.fen-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: nowrap;
+}
+
+.btn {
+    height: 30px;
+    padding: 0 11px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 11.5px;
+    font-weight: 500;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    transition: background var(--tr), border-color var(--tr), color var(--tr);
+    flex-shrink: 0;
+    user-select: none;
+}
+.btn:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--border-2);
+    color: var(--text);
+}
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
+
+.btn__icon { flex-shrink: 0; opacity: 0.75; }
+
+/* Apply button — gold accent */
+.btn--apply { border-color: var(--gold-dim); color: var(--gold); }
+.btn--apply:hover { background: var(--gold-glow); border-color: var(--gold); }
+.btn--apply .btn__icon { opacity: 1; }
+
+/* Grow buttons fill available space equally */
+.btn--grow        { flex: 1 0 0; justify-content: center; padding: 0 6px; }
+/* Icon-only buttons don't grow */
+.btn--icon-only   { flex: 0 0 auto; padding: 0 9px; }
+
+/* Auto-play active state */
+.btn.is-playing { color: var(--amber); border-color: var(--amber); }
+
+/* ── Keyboard hint strip ────────────────────────────────────────────── */
+.kbd-hints {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: -4px;
+}
+.kbd-hints span { font-size: 10px; color: var(--text-muted); }
+kbd {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 1px 4px;
+    font-family: var(--font-ui); font-size: 9px; font-weight: 600;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 3px;
+    letter-spacing: 0.02em; line-height: 1.6;
+}
+
+/* ── Error / coverage line ──────────────────────────────────────────── */
+.error-line {
+    min-height: 14px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--loss);
+    padding-left: 2px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1.4;
+}
+.error-line:empty { visibility: hidden; }
+.error-line.is-coverage-error { color: var(--amber); }
+
+/* ── Turn toggle ────────────────────────────────────────────────────── */
+.turn-row { display: flex; gap: 5px; }
+.turn-btn {
+    flex: 1;
+    height: 30px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 11px; font-weight: 600;
+    font-family: var(--font-ui);
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background var(--tr), border-color var(--tr), color var(--tr);
+    user-select: none;
+}
+.turn-btn:hover { background: var(--surface-3); border-color: var(--border-2); color: var(--text); }
+.turn-btn:active { transform: scale(0.97); }
+.turn-pip {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background var(--tr), box-shadow var(--tr);
+}
+.turn-pip--w { background: #f0d9b5; border: 1.5px solid #b58863; }
+.turn-pip--b { background: #1a1816; border: 1.5px solid #555; }
+.turn-btn[aria-pressed="true"] {
+    background: #242220;
+    border-color: var(--gold-dim);
+    color: var(--gold);
+}
+.turn-btn[aria-pressed="true"] .turn-pip--w { box-shadow: 0 0 5px rgba(240,217,181,0.5); }
+.turn-btn[aria-pressed="true"] .turn-pip--b { border-color: var(--text-dim); }
+
+/* ── Move-line history (inside PGN panel) ───────────────────────────── */
+.move-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 3px;
+    align-items: flex-start;
+    align-content: flex-start;
+    font-size: 11.5px;
+    min-height: 22px;
+    padding: 2px 0;
+}
+.move-line__empty {
+    color: var(--text-muted);
+    font-size: 10.5px;
+    font-style: italic;
+}
+.move-line__num {
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 2px 0;
+    user-select: none;
+}
+.move-line__move {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-dim);
+    font-size: 11.5px;
+    padding: 1px 5px;
+    transition: background var(--tr), color var(--tr);
+    cursor: pointer;
+}
+.move-line__move:hover    { background: var(--surface-2); color: var(--text); }
+.move-line__move.is-current {
+    background: var(--surface-2);
+    border-color: var(--border);
+    color: var(--text);
+    font-weight: 600;
+}
+/* Variations (alternate moves reached by navigating back and playing
+   something different) render smaller/dimmer and parenthesised, inline
+   with the main line — standard PGN notation. */
+.move-line__paren {
+    color: var(--text-muted);
+    font-size: 10.5px;
+    padding: 2px 0;
+    user-select: none;
+}
+.move-line__move--var {
+    font-size: 10.5px;
+    opacity: 0.82;
+}
+.move-line__move--var.is-current {
+    opacity: 1;
+}
+
+/* ── Board wrap ─────────────────────────────────────────────────────── */
+.board-wrap {
+    margin-top: auto;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--border), 0 14px 38px rgba(0,0,0,0.6);
+    width: 360px;
+    flex-shrink: 0;
+}
+.board-wrap-inner {
+    position: relative;
+    width: 360px;
+}
+
+/* ── Chessground sizing ─────────────────────────────────────────────── */
+/* Chessground's own CSS (chessground.base.css) sizes cg-wrap/cg-board/
+   piece/square as percentages of their container. #board is the
+   percentage-sizing root; height is set explicitly here since chessground
+   doesn't compute it from width in JS.
+
+   Chessground has its own rounding step one DOM layer deeper: render.ts's
+   updateBounds() reads #board's rendered width, then deliberately snaps
+   cg-container's width down to a whole number of DEVICE pixels evenly
+   divisible by 8 (so all 8 squares render crisply, with no anti-aliased
+   sub-pixel square boundaries) —
+   `Math.floor((bounds.width * devicePixelRatio) / 8) * 8 / devicePixelRatio` —
+   and sets that as an inline style on cg-container. At integer device
+   pixel ratios (1x, 2x) 360 CSS-px divides evenly and this is a no-op, but
+   at fractional ratios (1.5x is common on Windows displays) it doesn't:
+   360 * 1.5 = 540, 540 / 8 = 67.5, floor'd to 67 * 8 = 536, back to
+   536 / 1.5 ≈ 357.3px — about 2.7px short of #board's actual 360px on the
+   right/bottom edge. Squares/pieces are plain CSS percentages with no
+   JS-computed inline style of their own, so pinning cg-container's own
+   width and height with !important (overriding chessground's inline
+   style) is enough to keep the whole board at an exact, stable 360px
+   regardless of device pixel ratio; chessground's own docs don't call
+   this rounding behaviour out explicitly, which is why it's documented
+   here instead. */
+#board {
+    width: 360px;
+    height: 360px;
+}
+cg-container, cg-board {
+    width: 360px !important;
+    height: 360px !important;
+}
+
+/* ── Board square colours — Lichess brown (default) ─────────────────── */
+/* Superseded per-board by theme.js's generated <style id="chesstb-theme">
+   (see theme.js) — these are just the fallback defaults used before
+   theme.js runs, or if JS is unavailable. */
+cg-board {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScyJyBoZWlnaHQ9JzInPgo8cmVjdCB3aWR0aD0nMScgaGVpZ2h0PScxJyBmaWxsPScjZjBkOWI1Jy8+CjxyZWN0IHg9JzEnIHdpZHRoPScxJyBoZWlnaHQ9JzEnIGZpbGw9JyNiNTg4NjMnLz4KPHJlY3QgeT0nMScgd2lkdGg9JzEnIGhlaWdodD0nMScgZmlsbD0nI2I1ODg2MycvPgo8cmVjdCB4PScxJyB5PScxJyB3aWR0aD0nMScgaGVpZ2h0PScxJyBmaWxsPScjZjBkOWI1Jy8+Cjwvc3ZnPg==");
+    /* The SVG above is a 2x2 tile (2 squares per axis). 25% 25% sizes it
+       to 2/8 of the board per axis, so the tile repeats 4x4
+       (background-repeat's default) to fill all 64 squares. */
+    background-size: 25% 25%;
+}
+/* ── Rank/file coordinate labels — inset onto board edges (D7) ───────── */
+/* board.js sets coordinatesOnSquares: false, which uses chessground's
+   native coords.ranks/coords.files strips — one rank-only label per row,
+   one file-only label per column — rather than a combined "a8"-style
+   label rendered on all 64 squares. Chessground positions these OUTSIDE
+   the board by default (which .board-wrap's overflow:hidden would clip
+   anyway), so they're repositioned here to sit inset at the board's own
+   edges, at a 2px corner inset.
+
+   Colour: NOT done via renderCoords()'s own .coord-light/.coord-dark
+   classes (chessground's source, wrap.ts) — verified empirically (real
+   browser DOM inspection) that those classes don't correspond to the
+   actual square each label overlays once repositioned this way, and
+   chessground's own official theme CSS (chessground.brown.css) doesn't
+   use those classes for coords.ranks/coords.files either — it uses
+   structural :nth-child selectors scoped by an .orientation-white/
+   .orientation-black class on the wrap element instead (that class
+   exists purely for lichess's own outside-the-board label rhythm, not
+   square-accurate contrast, so its exact odd/even color pairing isn't
+   reusable here — only the selector STRUCTURE is). ranks/files are fixed
+   DOM arrays ['1'..'8']/['a'..'h'] (types.ts), so :nth-child parity is
+   deterministic; the odd/even -> colour mapping below was derived from
+   real square colours (a1 dark, a8 light, etc.) for each orientation and
+   confirmed by pixel-sampling a live render — not chessground's own
+   convention. */
+.orientation-white coords.ranks coord:nth-child(odd),
+.orientation-white coords.files coord:nth-child(odd) {
+    color: #f0d9b5 !important;   /* light text — these sit on dark squares */
+}
+.orientation-white coords.ranks coord:nth-child(even),
+.orientation-white coords.files coord:nth-child(even) {
+    color: #b58863 !important;   /* dark text — these sit on light squares */
+}
+.orientation-black coords.ranks coord:nth-child(odd),
+.orientation-black coords.files coord:nth-child(odd) {
+    color: #b58863 !important;   /* flipped board: parity-to-square-colour swaps */
+}
+.orientation-black coords.ranks coord:nth-child(even),
+.orientation-black coords.files coord:nth-child(even) {
+    color: #f0d9b5 !important;
+}
+coords.ranks coord, coords.files coord {
+    font-size: 9px !important;
+    font-weight: 600 !important;
+    font-family: var(--font-ui) !important;
+}
+.cg-wrap coords.ranks {
+    left: 0 !important;
+    top: 0 !important;
+    width: 14px !important;
+    height: 100% !important;
+    padding-left: 2px !important;   /* safe on this axis: one 14px-wide column, not tiled horizontally */
+    opacity: 1 !important;
+}
+.cg-wrap coords.ranks coord {
+    transform: none !important;
+    /* Chessground's own coord rule is `flex: 1 1 auto` — each cell's
+       basis comes from its own glyph's content width/height, so 8 cells
+       sharing a 360px row/column don't land on exact 45px multiples; the
+       shortfall accumulates top-to-bottom (or left-to-right for files),
+       and since labels are aligned within their own cell, that
+       accumulating error reads as the label drifting further from the
+       square's true edge the further along the row/column it is (barely
+       visible at '1'/'2', a couple of px off by '8'). flex:0 0 12.5% pins
+       every cell to exactly 45px (12.5% of 360px) regardless of its
+       glyph's own size, eliminating that drift.
+       The 2px corner inset itself is deliberately per-cell padding (below),
+       not container padding: padding on the container would shrink the
+       360px available for the 8 tiled cells to 358px, so flex:0 0 12.5%
+       would land on 44.75px cells instead of a true 45px — a smaller, but
+       still uneven, cell size. */
+    flex: 0 0 12.5% !important;
+    padding-top: 2px !important;
+}
+.cg-wrap coords.files {
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    height: 14px !important;
+    text-align: right !important;
+    text-transform: none !important;
+    /* align-items:flex-end, not padding-bottom on this container: files is
+       a row-direction flex container, so vertical is its CROSS axis, and
+       container padding on the cross axis doesn't push each cell's own
+       content toward the bottom the way main-axis padding does (confirmed
+       empirically — changing this container's padding-bottom had zero
+       effect on the rendered glyph position). flex-end makes each cell
+       shrink-to-content and sit at the bottom of the row; the actual 2px
+       corner inset is per-cell padding-bottom below, mirroring how
+       coords.ranks coord's padding-top is per-cell (its main axis, where
+       per-item padding works predictably). */
+    align-items: flex-end !important;
+    opacity: 1 !important;
+}
+.cg-wrap coords.files coord {
+    flex: 0 0 12.5% !important;   /* see the fuller comment on coords.ranks coord above */
+    padding-right: 2px !important;
+    padding-bottom: 2px !important;
+}
+
+/* ── Last-move highlight ──────────────────────────────────────────────── */
+cg-board square.last-move {
+    background-color: rgba(155, 199, 0, 0.41);
+}
+
+/* ── Check / checkmate halo ──────────────────────────────────────────── */
+cg-board square.check {
+    background-image: radial-gradient(
+        ellipse at center,
+        rgba(255, 0, 0, 0.90)   0%,
+        rgba(231, 0, 0, 0.70)  25%,
+        rgba(169, 0, 0, 0.00)  89%,
+        rgba(158, 0, 0, 0.00) 100%
+    );
+}
+
+/* ── Spare-piece trays (new — chessground has no built-in tray) ──────── */
+.spare-tray {
+    background-color: var(--tray-bg);
+    border: none;
+    padding: 5px 0;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    width: 360px;
+    box-sizing: border-box;
+}
+.spare-tray--black { border-bottom: 2px solid var(--tray-border); }
+.spare-tray--white { border-top: 2px solid var(--tray-border); }
+.spare-piece {
+    width: 45px;
+    height: 45px;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: none;
+    cursor: grab;
+}
+.spare-piece img {
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+.spare-piece.cp-selected {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+/* Crosshair cursor on the board while a spare piece is armed for placement */
+#board.cp-active { cursor: crosshair; }
+#board.cp-active square { cursor: crosshair; }
+
+/* Drag ghost and arrow overlay: no CSS needed here — both are native
+   chessground features (draggable.showGhost / drawable.autoShapes),
+   styled via chessground.base.css + the drawable.brushes config in
+   board.js. The old .arrow-overlay / .drag-ghost / @keyframes
+   ghost-pulse rules have no chessground equivalent to replace them with
+   because there's nothing hand-rolled left to style. */
+
+/* ── Right column ───────────────────────────────────────────────────── */
+.right-col {
+    flex: 1;
+    min-width: 340px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── PGN column ─────────────────────────────────────────────────────── */
+.pgn-col {
+    width: 300px;
+    flex-shrink: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── PGN panel ──────────────────────────────────────────────────────── */
+.pgn-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.pgn-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.pgn-panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.pgn-panel-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn--compact {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 10.5px;
+    flex-shrink: 0;
+}
+
+.pgn-moves-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px 14px 16px;
+}
+
+/* ── Results panel ──────────────────────────────────────────────────── */
+.results-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    display: flex;
+    flex-direction: column;
+    height: 100%;         /* fill .right-col exactly — no overflow */
+    overflow: hidden;
+    transition: opacity var(--tr);
+}
+.results-panel.is-loading .moves-scroll { opacity: .55; pointer-events: none; }
+/* The auto-play "stop" control must stay clickable even while a probe is in
+   flight — otherwise there's only a brief window between probe cycles where
+   auto-play can actually be turned off. */
+.results-panel.is-loading .btn--col-autoplay { pointer-events: auto; opacity: 1; }
+
+/* ── Panel header ───────────────────────────────────────────────────── */
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    flex-shrink: 0;
+}
+.panel-header__left  { display: flex; align-items: center; gap: 10px; }
+.panel-header__right { display: flex; align-items: center; gap: 6px; }
+.panel-header__count { font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted); }
+
+/* ── Panel title ────────────────────────────────────────────────────── */
+/* Static "Tablebase Result" label — never changes, unlike a value that
+   would track the latest probe. Sized to match .pgn-panel-title, the same
+   panel-title pattern used elsewhere in the app. */
+.panel-header__title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    user-select: none;
+}
+
+/* ── SSE progress bar ───────────────────────────────────────────────── */
+/* Inline next to the panel title, to its right, instead of a full-width
+   bar under the panel header — keeps the header height stable and puts
+   progress right next to the label it's updating towards. */
+.probe-progress {
+    width: 168px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+}
+.probe-progress__fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    transition: width 0.3s ease;
+    width: 0%;
+}
+.probe-progress-label {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+}
+.probe-progress-label:empty {
+    display: none;
+}
+
+/* ── Moves scroll container ─────────────────────────────────────────── */
+/* flex:1 + min-height:0 lets this shrink below its content height
+   so the table scrolls inside the panel rather than expanding it.  */
+.moves-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* ── Moves table ────────────────────────────────────────────────────── */
+.moves-table {
+    width: 100%;
+    border-collapse: collapse;
+    /* Fixed % widths (see <colgroup> in index.html) so column boundaries —
+       and therefore the auto-play buttons in the header — never shift as
+       score text length changes (e.g. during auto-play). */
+    table-layout: fixed;
+}
+
+.moves-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface-2);
+}
+
+/* ── Group header row (DTC / DTM / DTM50 labels) — centred ─────────── */
+.moves-table thead tr.group-row th {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    text-align: center;           /* centre all group labels */
+    padding: 6px 8px 4px;
+    border-bottom: none;
+    white-space: nowrap;
+}
+/* Flex row INSIDE the th (not on the th itself — display:flex on a table
+   cell suppresses its table-cell box, which breaks the whole table layout
+   and stacks the columns). Inline-flex so it still respects text-align. */
+.group-row-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+/* Left border on group boundaries (both rows share these classes) */
+.moves-table th.group-dtc  { border-left: 1px solid var(--border-2); }
+.moves-table th.group-dtm  { border-left: 1px solid var(--border-2); }
+.moves-table th.group-dtm50{ border-left: 1px solid var(--border-2); }
+
+/* ── Column header row (Move / Score labels) ────────────────────────── */
+.moves-table thead tr.col-row th {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    text-align: left;
+    padding: 3px 8px 7px;
+    border-bottom: 1px solid var(--border-2);
+    white-space: nowrap;
+}
+/* Override group-boundary padding for col-row: add left spacing after border */
+.moves-table thead tr.col-row th.group-dtc  { padding-left: 14px; }
+.moves-table thead tr.col-row th.group-dtm  { padding-left: 10px; }
+.moves-table thead tr.col-row th.group-dtm50{ padding-left: 10px; }
+/* Score column right-aligned */
+.moves-table thead tr.col-row th.col-score { text-align: right; padding-right: 14px; }
+
+/* ── Auto-play buttons — sit in the gap between Move and Score within
+   the existing column-header row, instead of a dedicated row ─────────── */
+.btn--col-autoplay {
+    height: 16px;
+    min-width: 20px;
+    padding: 0 5px;
+    border-radius: 3px;
+    line-height: 1;
+    justify-content: center;
+    color: var(--text-dim);
+}
+/* Two icons are always present; CSS toggles which is visible via the
+   existing .is-playing class. Both are hand-built SVG rather than text
+   glyphs, since a Unicode symbol ('▶'/'⏹') at 9px is at the mercy of the
+   browser/OS's emoji font and renders inconsistently and fuzzily at that
+   size. Both use fill: currentColor, so they automatically pick up the
+   amber .is-playing colour from the .btn.is-playing rule below with no
+   extra colour rule needed here. */
+.autoplay-icon {
+    width: 9px;
+    height: 9px;
+    fill: currentColor;
+}
+.autoplay-icon--play { display: block; }
+.autoplay-icon--stop { display: none; }
+.btn--col-autoplay.is-playing .autoplay-icon--play { display: none; }
+.btn--col-autoplay.is-playing .autoplay-icon--stop { display: block; }
+
+/* ── Table body cells ───────────────────────────────────────────────── */
+.moves-table td {
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.moves-table tbody tr:hover { background: var(--surface-2); }
+
+.moves-table td.col-rank {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-align: center;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+
+.moves-table td.col-move {
+    color: var(--blue);
+    font-weight: 500;
+    padding-right: 4px;
+    cursor: pointer;
+}
+
+/* Group boundary borders on td too */
+.moves-table td.group-dtc  { border-left: 1px solid var(--border-2); padding-left: 14px; }
+.moves-table td.group-dtm  { border-left: 1px solid var(--border-2); padding-left: 10px; }
+.moves-table td.group-dtm50{ border-left: 1px solid var(--border-2); padding-left: 10px; }
+
+.moves-table td.col-score {
+    text-align: right;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding-left: 4px;
+    padding-right: 14px;
+}
+
+/* Outcome colour mapping via data attribute */
+.moves-table td.col-score[data-outcome]                { color: var(--text-muted); }
+.moves-table td.col-score[data-outcome="win"]          { color: var(--win); }
+.moves-table td.col-score[data-outcome="cursed_win"]   { color: var(--amber); }
+.moves-table td.col-score[data-outcome="blessed_loss"] { color: var(--amber); }
+.moves-table td.col-score[data-outcome="loss"]         { color: var(--loss); }
+.moves-table td.col-score[data-outcome="draw"]         { color: var(--draw); }
+.moves-table td.col-score.is-mate                      { font-weight: 700; }
+
+.moves-table td.is-empty-cell { color: var(--text-muted); text-align: center; opacity: .35; }
+
+/* ── Root row ───────────────────────────────────────────────────────── */
+/* Lives in <thead> (see index.html) so it's pinned above #moves-tbody's
+   scrolling rows along with the group/col-row labels. The label reuses
+   .col-move for identical column alignment/font as a real move — only
+   the pointer cursor is dropped, since it isn't a clickable move. Gets
+   its own --surface-3 background plus a thin --gold-dim accent bar on
+   the leading edge, so it reads as a distinct, pinned reference row
+   rather than blending into the header above or the ranked rows below.
+   .is-hidden (display:none) is toggled by tablebase.js when the
+   "Show Root Row" setting is off — see Tablebase.setShowRootRow(). */
+.moves-table td.col-move.is-root {
+    cursor: default;
+    color: var(--gold);
+    font-weight: 600;
+}
+#root-row td {
+    background: var(--surface-3);
+    border-bottom: 1px solid var(--border-2);
+}
+#root-row td:first-child {
+    box-shadow: inset 3px 0 0 var(--gold-dim);
+}
+#root-row.is-hidden { display: none; }
+
+/* Pair hover — highlight both move + score cells together */
+.moves-table td.is-pair-hover { background: var(--surface-3); }
+.moves-table td.is-pair-hover.col-move { color: var(--text); }
+.moves-table td.col-move[data-san],
+.moves-table td.col-score[data-san] {
+    cursor: pointer;
+    transition: color var(--tr), background var(--tr);
+}
+.moves-table td.col-move[data-san]:active  { color: var(--gold); background: var(--surface-3); }
+.moves-table td.col-score[data-san]:active { background: var(--surface-3); }
+
+/* ── Insufficient-material info dot ──────────────────────────────────── */
+/* Sits after the "Draw" score text for a move whose draw is caused by
+   insufficient material — the reason is a hover tooltip (native title
+   attribute) instead of being spelled out inline, so the score column
+   never has to fit "Draw by Insufficient Material". */
+.info-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px; height: 13px;
+    margin-left: 4px;
+    cursor: help;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+.info-dot__icon {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+}
+.info-dot__bg   { fill: var(--text-dim); }
+.info-dot__mark { fill: var(--surface); }
+
+/* ── Cursed-win / blessed-loss warning dot ───────────────────────────── */
+/* Same layout, icon, colours, and placement (after the score text) as
+   .info-dot above — otherwise identical in appearance (see
+   _warningIconSvg in tablebase.js); only the hover title tells the two
+   dots apart. */
+.warning-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 13px; height: 13px;
+    margin-left: 4px;
+    cursor: help;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+.warning-dot__icon {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+}
+.warning-dot__bg   { fill: var(--text-dim); }
+.warning-dot__mark { fill: var(--surface); }
+
+/* ── Empty state ────────────────────────────────────────────────────── */
+.moves-empty-state {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 24px;
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 12px;
+    flex: 1;
+}
+.moves-empty-state__icon { font-size: 28px; opacity: .18; }
+
+/* ── Loading shimmer ────────────────────────────────────────────────── */
+@keyframes shimmer {
+    0%, 100% { opacity: 0.3; }
+    50%       { opacity: 0.65; }
+}
+.is-loading .moves-table td.col-score,
+.is-loading .moves-table td.col-move { animation: shimmer 1.1s ease-in-out infinite; }
+
+/* ── Promotion dialog ───────────────────────────────────────────────── */
+.promotion-dialog {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.72);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+}
+.promotion-dialog.is-visible { display: flex; }
+.promotion-tray {
+    background: var(--surface-3);
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-lg);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    box-shadow: var(--shadow);
+}
+.promotion-tray__title {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--text-muted);
+    user-select: none;
+}
+.promotion-tray__pieces { display: flex; gap: 8px; }
+.promotion-piece-btn {
+    width: 60px; height: 60px;
+    background: var(--tray-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    cursor: pointer; padding: 6px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background var(--tr), border-color var(--tr), transform var(--tr);
+}
+.promotion-piece-btn:hover        { background: var(--tray-bg-dark); border-color: var(--gold-dim); }
+.promotion-piece-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.promotion-piece-btn:active       { transform: scale(0.94); }
+.promotion-piece-btn img {
+    width: 44px; height: 44px;
+    object-fit: contain;
+    pointer-events: none; user-select: none;
+}
+@media (prefers-reduced-motion: reduce) { .promotion-piece-btn { transition: none; } }
+
+/* ── PGN import dialog ──────────────────────────────────────────────── */
+.pgn-dialog {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.72);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.pgn-dialog.is-open { display: flex; }
+.pgn-dialog__inner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow);
+    width: 100%; max-width: 560px;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+}
+.pgn-dialog__header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.pgn-dialog__title { font-size: 13px; font-weight: 600; }
+.pgn-dialog__close {
+    background: none; border: none; color: var(--text-dim);
+    font-size: 16px; line-height: 1; padding: 3px 7px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--tr), color var(--tr);
+}
+.pgn-dialog__close:hover { background: var(--surface-2); color: var(--text); }
+.pgn-dialog__textarea {
+    flex-shrink: 0;
+    margin: 12px 18px 0;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11.5px; line-height: 1.5;
+    padding: 8px 10px;
+    resize: vertical; outline: none;
+    transition: border-color var(--tr);
+}
+.pgn-dialog__textarea:focus { border-color: var(--border-2); }
+.pgn-dialog__error { font-size: 11px; color: var(--loss); padding: 4px 18px 0; min-height: 18px; }
+.pgn-dialog__inner > .btn {
+    align-self: flex-start;
+    margin: 8px 18px;
+}
+.pgn-dialog__moves {
+    flex: 1; overflow-y: auto;
+    padding: 4px 18px 16px;
+    display: flex; flex-wrap: wrap;
+    gap: 3px 6px;
+    align-content: flex-start;
+}
+.pgn-move-btn {
+    background: var(--surface-2);
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-dim);
+    font-size: 11.5px; font-family: var(--font-mono);
+    padding: 3px 7px;
+    cursor: pointer;
+    transition: background var(--tr), color var(--tr);
+}
+.pgn-move-btn:hover { background: var(--border); color: var(--text); }
+
+/* ── Toast notifications ────────────────────────────────────────────── */
+.toast-container {
+    position: fixed;
+    bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 300;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; pointer-events: none;
+}
+.toast {
+    padding: 8px 16px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-md);
+    font-size: 12.5px; font-weight: 500;
+    color: var(--text-dim);
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    animation: toast-in 0.2s ease forwards;
+    pointer-events: none;
+}
+.toast.is-out { animation: toast-out 0.2s ease forwards; }
+@keyframes toast-in  { from { opacity:0; transform:translateY(8px);  } to { opacity:1; transform:translateY(0); } }
+@keyframes toast-out { from { opacity:1; transform:translateY(0);    } to { opacity:0; transform:translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) {
+    .toast, .toast.is-out { animation: none; }
+    .toast.is-out { opacity: 0; }
+}
+
+/* ── Screen-reader utility ──────────────────────────────────────────── */
+.sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────── */
+* { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+/* ── Admin page (`admin.html`) ─────────────────────────────────────────
+   `admin.html` links this stylesheet like `index.html` does, so it
+   already gets the font-face rules, :root tokens, global reset, base
+   `body`/`a` rules, and the shared `.btn` component for free. Everything
+   below is scoped under the `.admin-page` class on that page's `<body>`,
+   both to override the fixed-viewport rule (§3) — the dashboard is an
+   ordinary scrolling document, not the single-screen board layout — and
+   to keep these otherwise-generic selectors (`.card`, `.grid`, `.stat`,
+   `.status`, ...) from ever leaking into `index.html`'s styling. ────── */
+
+body.admin-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+    padding: 32px;
+}
+
+.admin-page h1 {
+    font-size: 20px;
+    color: var(--text);
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+/* "← Back to explorer" link — color/hover comes from the global `a` /
+   `a:hover` rule near the top of this file, same as every other link
+   in the app. */
+.admin-page h1 a { font-size: 13px; margin-left: auto; }
+
+/* Card-section labels, sized to match the app's other panel-title rows
+   (`.pgn-panel-title`, `.panel-header__title`) rather than a one-off
+   value. */
+.admin-page h2 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.admin-page .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+/* Same background/border/radius recipe as `.pgn-panel` / `.results-panel`
+   — this app's one existing "card" pattern, reused here rather than a
+   second, slightly-different one. */
+.admin-page .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 20px;
+}
+
+.admin-page .stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+.admin-page .stat:last-child { border-bottom: none; }
+.admin-page .stat .label { color: var(--text-dim); }
+.admin-page .stat .value {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+}
+
+.admin-page .bar-wrap {
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 8px 0 12px;
+}
+/* Identical gradient to the results panel's SSE progress bar
+   (`.probe-progress__fill`, §"SSE progress bar") — reused for the same
+   "live-updating proportion" meaning rather than inventing a second one. */
+.admin-page .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    border-radius: 4px;
+    transition: width 0.4s;
+}
+
+.admin-page .toolbar-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+/* Destructive-action modifier for the shared `.btn` component (the
+   Refresh button next to it needs no modifier — plain `.btn` already
+   matches). Follows the same pattern as `.btn--apply`'s gold accent,
+   using the new `--loss-glow` token for the hover fill. */
+.admin-page .btn.danger { border-color: var(--loss); color: var(--loss); }
+.admin-page .btn.danger:hover { background: var(--loss-glow); border-color: var(--loss); }
+
+.admin-page .status {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    min-height: 18px;
+}
+.admin-page .status.ok  { color: var(--win); }
+.admin-page .status.err { color: var(--loss); }
+
+.admin-page .refresh-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+    .admin-page .grid { grid-template-columns: 1fr; }
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChessTB — Admin Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="admin-page">
+<h1>
+  ♟ ChessTB Cache Dashboard
+  <a href="/">← Back to explorer</a>
+</h1>
+
+<div class="toolbar-row">
+  <button class="btn" id="refresh-btn">Refresh</button>
+  <button class="btn danger" id="clear-btn">Clear all caches</button>
+</div>
+
+<div class="refresh-row">
+  <span id="next-refresh">Auto-refreshes every 5 s</span>
+  <span id="last-updated"></span>
+</div>
+
+<div class="grid">
+  <div class="card" id="card-eval">
+    <h2>Root Probe Cache (evaluate_fen)</h2>
+    <div class="bar-wrap"><div class="bar-fill" id="bar-eval" style="width:0%"></div></div>
+    <div id="stats-eval"><div class="stat"><span class="label">Loading…</span></div></div>
+  </div>
+  <div class="card" id="card-probe">
+    <h2>Child Probe Cache (_probe_fen)</h2>
+    <div class="bar-wrap"><div class="bar-fill" id="bar-probe" style="width:0%"></div></div>
+    <div id="stats-probe"><div class="stat"><span class="label">Loading…</span></div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <h2>Thread Pool &amp; Configuration</h2>
+  <div id="stats-pool"><div class="stat"><span class="label">Loading…</span></div></div>
+</div>
+
+<div class="status" id="status-msg"></div>
+
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+</body>
+</html>

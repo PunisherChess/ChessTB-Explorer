@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChessTB Explorer</title>
+
+  <!-- Inline SVG favicon — no extra file needed -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23c89b3c'/%3E%3Ctext x='12' y='17' text-anchor='middle' font-family='system-ui,sans-serif' font-size='13' font-weight='700' fill='%230e0d0c'%3E%E2%99%9F%3C/text%3E%3C/svg%3E">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/chessground.base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pieces-cburnett.css') }}" id="chesstb-piece-css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header class="site-header" role="banner">
+  <!-- Replace the inner SVG content with your own logo mark.
+       Keep class="site-header__logo" and a square viewBox so it
+       scales correctly into the 18 × 18 slot set in main.css. -->
+  <svg class="site-header__logo" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+    <circle cx="12" cy="12" r="11" fill="#c89b3c"/>
+    <circle cx="12" cy="12" r="11" fill="none" stroke="#0e0d0c" stroke-width="1"/>
+    <!-- placeholder mark — replace with your logo paths -->
+    <text x="12" y="16.5" text-anchor="middle"
+          font-family="system-ui,sans-serif" font-size="11"
+          font-weight="700" fill="#0e0d0c">M</text>
+  </svg>
+
+  <span class="site-header__title">ChessTB</span>
+  <span class="site-header__sep" aria-hidden="true">·</span>
+  <span class="site-header__sub">Explorer</span>
+
+  <nav class="site-header__nav" aria-label="Site links">
+    <a href="/admin" class="site-header__link site-header__link--icon"
+       title="Cache dashboard" aria-label="Admin cache dashboard">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/>
+        <path d="M12 14 16 8"/>
+        <path d="M5 19a9 9 0 1 1 14 0"/>
+      </svg>
+    </a>
+    <a href="/openapi.yaml" class="site-header__link site-header__link--icon"
+       title="API specification" aria-label="API specification" target="_blank" rel="noopener">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="16 18 22 12 16 6"/>
+        <polyline points="8 6 2 12 8 18"/>
+      </svg>
+    </a>
+    <button id="settings-btn" class="site-header__link site-header__link--icon"
+            title="Board settings" aria-label="Open board settings">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83
+                 l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21
+                 a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0
+                 -1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0
+                 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65
+                 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1
+                 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0
+                 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65
+                 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65
+                 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+                 a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </nav>
+</header>
+
+<!-- ── Main layout ──────────────────────────────────────────────────────── -->
+<main class="content" role="main">
+
+  <!-- ═══════════════════ LEFT COLUMN ═══════════════════ -->
+  <div class="left-col">
+
+    <!-- FEN input -->
+    <div class="fen-block">
+      <div class="fen-input-wrap">
+        <span class="fen-input-wrap__label" aria-hidden="true">FEN</span>
+        <input
+          id="fen-input"
+          class="fen-input"
+          type="text"
+          value="4k3/8/8/8/8/8/8/4K2R w - - 0 1"
+          placeholder="Paste FEN here…"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+          aria-label="FEN position string"
+        >
+      </div>
+
+      <!-- Action buttons -->
+      <div class="fen-actions" role="toolbar" aria-label="Board actions">
+        <button id="apply-btn" class="btn btn--apply btn--grow" title="Apply FEN (Enter)">
+          <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Apply
+        </button>
+        <button id="flip-btn" class="btn btn--grow" title="Flip board (F)">
+          <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M7 16V4m0 0L3 8m4-4 4 4"/>
+            <path d="M17 8v12m0 0 4-4m-4 4-4-4"/>
+          </svg>
+          Flip
+        </button>
+        <button id="clear-btn" class="btn btn--grow" title="Clear board (C)">
+          <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>
+          </svg>
+          Clear
+        </button>
+        <button id="copy-btn" class="btn btn--grow"
+                title="Copy FEN to clipboard" aria-label="Copy FEN to clipboard">
+          <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+          Copy
+        </button>
+        <button id="back-btn" class="btn btn--icon-only"
+                title="Undo (←)" aria-label="Undo" disabled>
+          <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+        </button>
+        <button id="forward-btn" class="btn btn--icon-only"
+                title="Redo (→)" aria-label="Redo" disabled>
+          <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Keyboard hint strip -->
+    <div class="kbd-hints" aria-label="Keyboard shortcuts">
+      <span><kbd>Enter</kbd> Apply</span>
+      <span><kbd>F</kbd> Flip</span>
+      <span><kbd>C</kbd> Clear</span>
+      <span><kbd>←</kbd> Back</span>
+      <span><kbd>→</kbd> Forward</span>
+    </div>
+
+    <!-- Error / coverage-indicator line -->
+    <div id="error-line" class="error-line" role="alert" aria-live="polite"></div>
+
+    <!-- Side-to-move toggle -->
+    <div class="turn-row" role="group" aria-label="Side to move">
+      <button id="turn-white" class="turn-btn" aria-pressed="true" title="White to move">
+        <span class="turn-pip turn-pip--w" aria-hidden="true"></span>
+        White to move
+      </button>
+      <button id="turn-black" class="turn-btn" aria-pressed="false" title="Black to move">
+        <span class="turn-pip turn-pip--b" aria-hidden="true"></span>
+        Black to move
+      </button>
+    </div>
+
+    <!-- Move-line history — rendered in PGN panel -->
+
+    <!-- Board + spare-piece trays.
+         Chessground has no built-in spare-piece tray concept, so the trays
+         are static markup here, wired up by board.js's init()/reconstruct()
+         (img.src populated from Theme.pieceThemeFn(), same source the
+         promotion dialog already uses). Best-move arrows and the drag ghost
+         are native chessground features (drawable.autoShapes /
+         draggable.showGhost) — no extra markup needed for those. -->
+    <div class="board-wrap" aria-label="Chess board">
+      <div id="board-wrap-inner" class="board-wrap-inner">
+        <div class="spare-tray spare-tray--black" data-color="b">
+          <button class="spare-piece" data-piece="bK" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bQ" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bR" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bB" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bN" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bP" type="button"><img src="" draggable="false" alt=""></button>
+        </div>
+        <div id="board"></div>
+        <div class="spare-tray spare-tray--white" data-color="w">
+          <button class="spare-piece" data-piece="wP" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="wN" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="wB" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="wR" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="wQ" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="wK" type="button"><img src="" draggable="false" alt=""></button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /left-col -->
+
+
+  <!-- ═══════════════════ RIGHT COLUMN ════════════════════ -->
+  <div class="right-col">
+    <section class="results-panel" aria-label="Tablebase results">
+
+      <!-- Panel header -->
+      <div class="panel-header">
+        <div class="panel-header__left">
+          <!-- Static label — always the same text rather than reflecting
+               the latest probe result. -->
+          <span class="panel-header__title">Tablebase Result</span>
+          <!-- SSE streaming progress — sits inline next to the label
+               instead of a full-width bar under the header. -->
+          <span id="probe-progress-label" class="probe-progress-label"
+                aria-live="polite"></span>
+          <div id="probe-progress" class="probe-progress"
+               style="display:none" aria-hidden="true">
+            <div class="probe-progress__fill"></div>
+          </div>
+        </div>
+        <div class="panel-header__right">
+          <span id="move-count" class="panel-header__count"
+                aria-live="polite" aria-atomic="true"></span>
+          <button id="export-btn" class="btn btn--icon-only btn--compact"
+                  title="Download move table as CSV">
+            <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <path d="M4 19h16"/>
+            </svg>
+            CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Moves table -->
+      <div class="moves-scroll" role="region"
+           aria-label="Move rankings" tabindex="0">
+        <table class="moves-table"
+               aria-label="Moves ranked by tablebase metric">
+          <caption class="sr-only">
+            When Show Root Row is enabled in Settings, the current
+            position's own score is shown first, followed by legal moves
+            ranked by Distance to Conversion, Distance to Mate, and
+            Distance to Mate with the 50-move rule
+          </caption>
+          <!-- Fixed % widths (paired with table-layout:fixed in main.css) so
+               column boundaries — and therefore the auto-play buttons in the
+               header — never shift as score text length changes during
+               auto-play. Group totals: rank 3% · DTC 27% · DTM 35% · DTM50 35%. -->
+          <colgroup>
+            <col style="width:3%">
+            <col style="width:13%">
+            <col style="width:14%">
+            <col style="width:13%">
+            <col style="width:22%">
+            <col style="width:13%">
+            <col style="width:22%">
+          </colgroup>
+          <thead>
+            <tr class="group-row">
+              <th></th>
+              <th class="group-dtc" colspan="2">
+                <span class="group-row-inner">
+                  <span class="group-label">DTC</span>
+                  <button id="autoplay-btn-dtc" class="btn btn--col-autoplay"
+                          title="Auto-play best DTC move" aria-label="Auto-play best DTC move">
+                    <svg class="autoplay-icon autoplay-icon--play" viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M3 2.1 L9.6 6 L3 9.9 Z"/>
+                    </svg>
+                    <svg class="autoplay-icon autoplay-icon--stop" viewBox="0 0 12 12" aria-hidden="true">
+                      <rect x="2.4" y="2.4" width="7.2" height="7.2" rx="1"/>
+                    </svg>
+                  </button>
+                </span>
+              </th>
+              <th class="group-dtm" colspan="2">
+                <span class="group-row-inner">
+                  <span class="group-label">DTM</span>
+                  <button id="autoplay-btn-dtm" class="btn btn--col-autoplay"
+                          title="Auto-play best DTM move" aria-label="Auto-play best DTM move">
+                    <svg class="autoplay-icon autoplay-icon--play" viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M3 2.1 L9.6 6 L3 9.9 Z"/>
+                    </svg>
+                    <svg class="autoplay-icon autoplay-icon--stop" viewBox="0 0 12 12" aria-hidden="true">
+                      <rect x="2.4" y="2.4" width="7.2" height="7.2" rx="1"/>
+                    </svg>
+                  </button>
+                </span>
+              </th>
+              <th class="group-dtm50" colspan="2">
+                <span class="group-row-inner">
+                  <span class="group-label">DTM50</span>
+                  <button id="autoplay-btn-dtm50" class="btn btn--col-autoplay"
+                          title="Auto-play best DTM50 move" aria-label="Auto-play best DTM50 move">
+                    <svg class="autoplay-icon autoplay-icon--play" viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M3 2.1 L9.6 6 L3 9.9 Z"/>
+                    </svg>
+                    <svg class="autoplay-icon autoplay-icon--stop" viewBox="0 0 12 12" aria-hidden="true">
+                      <rect x="2.4" y="2.4" width="7.2" height="7.2" rx="1"/>
+                    </svg>
+                  </button>
+                </span>
+              </th>
+            </tr>
+            <tr class="col-row">
+              <th class="col-rank"              scope="col" aria-label="Rank">#</th>
+              <th class="group-dtc   col-move"  scope="col">Move</th>
+              <th class="col-score"             scope="col">Score</th>
+              <th class="group-dtm   col-move"  scope="col">Move</th>
+              <th class="col-score"             scope="col">Score</th>
+              <th class="group-dtm50 col-move"  scope="col">Move</th>
+              <th class="col-score"             scope="col">Score</th>
+            </tr>
+            <!-- Root row — the current position's own score for each metric,
+                 shown ahead of the ranked child moves below, when the
+                 "Show Root Row" setting (see #settings-panel) is enabled.
+                 Lives in <thead> (not #moves-tbody) so it stays pinned above
+                 the scrolling rows the same way the group/col-row labels do
+                 — only #moves-tbody itself scrolls inside .moves-scroll.
+                 No rank number (see .col-rank below): this isn't a ranked
+                 move. Cells are rebuilt by tablebase.js; the dashes below
+                 are just the pre-probe placeholder. Hidden via the
+                 `.is-hidden` class (display:none) when the setting is off —
+                 see Tablebase.setShowRootRow() / _blankRootRow() in
+                 tablebase.js. -->
+            <tr id="root-row" class="root-row">
+              <td class="col-rank"></td>
+              <td class="group-dtc col-move is-empty-cell">—</td>
+              <td class="col-score is-empty-cell">—</td>
+              <td class="group-dtm col-move is-empty-cell">—</td>
+              <td class="col-score is-empty-cell">—</td>
+              <td class="group-dtm50 col-move is-empty-cell">—</td>
+              <td class="col-score is-empty-cell">—</td>
+            </tr>
+          </thead>
+          <tbody id="moves-tbody">
+            <!-- rows injected by tablebase.js -->
+          </tbody>
+        </table>
+
+        <div id="moves-empty-state" class="moves-empty-state"
+             style="display:none" aria-live="polite">
+          <span class="moves-empty-state__icon" aria-hidden="true">♟</span>
+          <p>Probe a position to see the tablebase ranking of each legal move.</p>
+        </div>
+      </div>
+
+    </section>
+  </div><!-- /right-col -->
+
+  <!-- ═══════════════════ PGN COLUMN ════════════════════ -->
+  <div class="pgn-col">
+    <section class="pgn-panel" aria-label="Game PGN">
+
+      <!-- Panel header -->
+      <div class="pgn-panel-header">
+        <span class="pgn-panel-title">PGN</span>
+        <div class="pgn-panel-header__actions">
+          <button id="pgn-copy-btn" class="btn btn--compact" title="Copy PGN to clipboard">
+            Copy
+          </button>
+          <button id="pgn-btn" class="btn btn--compact" title="Import PGN game">
+            <svg class="btn__icon" width="11" height="11" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21V9"/>
+              <polyline points="7 14 12 9 17 14"/>
+              <path d="M4 5h16"/>
+            </svg>
+            Import
+          </button>
+        </div>
+      </div>
+
+      <!-- Move history (rendered by ui.js) -->
+      <div class="pgn-moves-scroll" role="region" aria-label="Move history" tabindex="0">
+        <div id="move-line" class="move-line" role="list" aria-label="Played moves"></div>
+      </div>
+
+    </section>
+  </div><!-- /pgn-col -->
+
+</main><!-- /content -->
+
+
+<!-- ── Promotion dialog ─────────────────────────────────────────────────── -->
+<!-- Shown when a pawn is dragged to the back rank. board.js populates piece
+     images and wires click handlers. Clicking the backdrop or pressing Escape
+     cancels without committing a move. -->
+<div id="promotion-dialog" class="promotion-dialog"
+     role="dialog" aria-modal="true" aria-label="Choose promotion piece">
+  <div class="promotion-tray">
+    <span class="promotion-tray__title">Promote pawn to:</span>
+    <div class="promotion-tray__pieces">
+      <button class="promotion-piece-btn" data-piece="q" aria-label="Queen">
+        <img src="" alt="Queen" draggable="false">
+      </button>
+      <button class="promotion-piece-btn" data-piece="r" aria-label="Rook">
+        <img src="" alt="Rook"  draggable="false">
+      </button>
+      <button class="promotion-piece-btn" data-piece="b" aria-label="Bishop">
+        <img src="" alt="Bishop" draggable="false">
+      </button>
+      <button class="promotion-piece-btn" data-piece="n" aria-label="Knight">
+        <img src="" alt="Knight" draggable="false">
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── PGN import dialog ───────────────────────────────────────────────── -->
+<div id="pgn-dialog" class="pgn-dialog"
+     role="dialog" aria-modal="true" aria-label="Import PGN">
+  <div class="pgn-dialog__inner">
+    <div class="pgn-dialog__header">
+      <h2 class="pgn-dialog__title">Import PGN</h2>
+      <button id="pgn-close-btn" class="pgn-dialog__close" aria-label="Close">✕</button>
+    </div>
+    <textarea id="pgn-input" class="pgn-dialog__textarea"
+              placeholder="Paste PGN here… e.g.  1. e4 e5 2. Nf3 Nc6 3. Bc4"
+              rows="7" spellcheck="false"></textarea>
+    <div id="pgn-error" class="pgn-dialog__error"
+         role="alert" aria-live="polite"></div>
+    <button id="pgn-parse-btn" class="btn">Parse Game</button>
+    <div id="pgn-moves" class="pgn-dialog__moves"
+         role="list" aria-label="Game moves"></div>
+  </div>
+</div>
+
+
+<!-- ── Settings panel ──────────────────────────────────────────────────────
+     Dropdown anchored under the header cog button. Two accordion sections
+     built by ui.js: Board (colour swatch or the real board image file —
+     no thumbnail asset anywhere) and Piece Set (each set's wN.svg), followed
+     by two standalone rows: the Show Root Row toggle and the Autoplay Delay
+     slider. Closes on cog click, close-button click, outside click, or
+     Escape. -->
+<div id="settings-panel" class="settings-panel"
+     role="dialog" aria-modal="false" aria-label="Board settings">
+
+  <div class="settings-panel__header">
+    <span class="settings-panel__title">Board Settings</span>
+    <button id="settings-close-btn" class="btn btn--icon-only btn--compact"
+            aria-label="Close settings">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="settings-row">
+    <button class="settings-row__header" aria-expanded="false">
+      <span>Board</span>
+      <svg class="settings-row__chevron" width="12" height="12" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+    <div class="settings-row__body">
+      <div id="board-grid" class="theme-grid"><!-- options injected by ui.js --></div>
+    </div>
+  </div>
+
+  <div class="settings-row">
+    <button class="settings-row__header" aria-expanded="false">
+      <span>Piece Set</span>
+      <svg class="settings-row__chevron" width="12" height="12" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+    <div class="settings-row__body">
+      <div id="pieceset-grid" class="theme-grid"><!-- options injected by ui.js --></div>
+    </div>
+  </div>
+
+  <!-- Show Root Row — plain toggle row, not an accordion section (no
+       header/body/chevron): a single on/off preference, not a set of
+       options to pick from like Board/Piece Set above. Wired up in
+       ui.js's _initSettings(); persisted/rendered by tablebase.js
+       (see Tablebase.setShowRootRow). -->
+  <div class="settings-row settings-row--toggle">
+    <label class="settings-toggle" for="show-root-row-toggle">
+      <span class="settings-toggle__label">Show Root Row</span>
+      <span class="toggle-switch">
+        <input type="checkbox" id="show-root-row-toggle"
+               class="toggle-switch__input" role="switch">
+        <span class="toggle-switch__track" aria-hidden="true"></span>
+      </span>
+    </label>
+  </div>
+
+  <!-- Autoplay Delay — continuous slider from 0s to 2.5s in 50ms steps,
+       default 1.25s. Also a standalone row, not an accordion section, and
+       always the last row in the panel. The value set here is a pacing
+       floor, not a fixed wait — auto-play still waits for the tablebase
+       probe too, so the actual gap between moves is max(this value, probe
+       latency); see ui.js's _armAutoPlayWait(). Wired up and persisted in
+       ui.js (see _AUTO_PLAY_DELAY_DEFAULT_MS / _autoPlayDelayMs). -->
+  <div class="settings-row settings-row--slider">
+    <span class="settings-slider__label">Autoplay Delay</span>
+    <div class="settings-slider__control">
+      <input type="range" id="autoplay-delay-slider" class="range-slider"
+             min="0" max="2500" step="50" value="1250" style="--range-fill: 50%"
+             aria-label="Autoplay delay">
+      <div class="range-slider__ticks" aria-hidden="true">
+        <span>0s</span><span>1.25s</span><span>2.5s</span>
+      </div>
+    </div>
+    <span class="settings-slider__value" id="autoplay-delay-value">1.25s</span>
+  </div>
+
+</div>
+
+
+<!-- ── Toast container ─────────────────────────────────────────────────── -->
+<div id="toast-container" class="toast-container"
+     aria-live="polite" aria-atomic="false"></div>
+
+
+<!-- ── Scripts — order matters ─────────────────────────────────────────── -->
+<!--
+    chess.js 1.4.0 and chessground are both ES-module only. app.js
+    (type="module") imports them transitively via board.js → ../vendor/
+    chess-1.4.0.esm.js and ../vendor/chessground.min.js. No separate
+    <script> tags or load-order shims are needed for these dependencies;
+    the module graph handles it.
+-->
+<script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+</body>
+</html>
