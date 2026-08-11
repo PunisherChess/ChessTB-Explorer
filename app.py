@@ -71,6 +71,7 @@ log = logging.getLogger(__name__)
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REMOTE_FALLBACK_PATH = os.path.join(_THIS_DIR, "remote", "remote_fallback.py")
+_REMOTE_DIRECT_PATH = os.path.join(_THIS_DIR, "remote", "remote_direct.py")
 
 
 def _load_module_by_path(module_name: str, path: str):
@@ -89,17 +90,17 @@ import chess.chesstb as chesstb
 
 log.info("chess.chesstb backend: noobpwnftw/python-chess (add-chesstb-tablebases)")
 
-# Remote (HTTP) tablebase support. chess.chesstb.Tablebase only ever knows
-# how to read a local filesystem path, so a remote (URL) TABLEBASE_PATH is
-# layered on top by the small disk-caching shim in remote/remote_fallback.py
-# (see that file's module docstring for how and why): the first probe
-# against a given material downloads that table in full to a temporary
-# local cache directory, and later probes against the same material are
-# served from local disk with no further network round trip.
-# looks_like_remote()/RemoteSourceError below come from
-# remote/remote_source.py, re-exported through remote_fallback.
-_remote = _load_module_by_path("_chesstb_remote_fallback", _REMOTE_FALLBACK_PATH)
-remote_source = _remote.remote_source
+# Remote (HTTP) tablebase support, in two flavours -- config.REMOTE_MODE
+# picks one, and both are signature-compatible with
+# chesstb.open_tablebase so the choice is one call below:
+#   remote/remote_direct.py   ("direct")   probe in place over byte ranges
+#   remote/remote_fallback.py ("download") whole-file download, disk-cached
+# See each file's module docstring for the design and the trade-off.
+# looks_like_remote()/RemoteSourceError come from remote/remote_source.py,
+# re-exported identically through both.
+_remote_download = _load_module_by_path("_chesstb_remote_fallback", _REMOTE_FALLBACK_PATH)
+_remote_direct = _load_module_by_path("_chesstb_remote_direct", _REMOTE_DIRECT_PATH)
+remote_source = _remote_download.remote_source
 
 
 # ── Type aliases ──────────────────────────────────────────────────────────────
@@ -145,6 +146,13 @@ def _validated_str(name: str, value) -> str:
     return value
 
 
+def _validated_choice(name: str, value, allowed: tuple) -> str:
+    if value not in allowed:
+        raise ValueError(
+            f"config.{name} must be one of {', '.join(map(repr, allowed))}, got {value!r}")
+    return value
+
+
 def _validated_bool(name: str, value) -> bool:
     if not isinstance(value, bool):
         raise ValueError(f"config.{name} must be True or False, got {value!r}")
@@ -172,6 +180,7 @@ class AppConfig:
     # entirely for a local TABLEBASE_PATH directory. Bounds an on-disk LRU
     # of whole downloaded table files cached by remote/remote_fallback.py
     # (see that file's module docstring for the full design).
+    remote_mode:             str   = field(default="direct")
     remote_page_cache_bytes: int   = field(default=128 * 1024 * 1024)
     remote_page_size_bytes:  int   = field(default=256 * 1024)
     remote_timeout_secs:     float = field(default=20.0)
@@ -203,6 +212,9 @@ class AppConfig:
             # True, waitress otherwise (see README.md "Running in production").
             debug=_validated_bool("DEBUG", config.DEBUG),
             waitress_threads=_validated_int("WAITRESS_THREADS", config.WAITRESS_THREADS),
+            remote_mode=_validated_choice(
+                "REMOTE_MODE", getattr(config, "REMOTE_MODE", "direct"),
+                ("direct", "download")),
             remote_page_cache_bytes=_validated_int(
                 "REMOTE_PAGE_CACHE_BYTES", config.REMOTE_PAGE_CACHE_BYTES),
             remote_page_size_bytes=_validated_int(
@@ -219,6 +231,13 @@ except (ValueError, AttributeError) as e:
     raise SystemExit(1) from e
 
 _tablebase_is_remote = remote_source.looks_like_remote(cfg.tablebase_path)
+# Which remote backend actually gets used: config.REMOTE_MODE, downgraded to
+# "download" if the installed chess.chesstb predates the source seam
+# "direct" needs. Resolved here so the open below and the logging and
+# /admin/cache/stats reporting all name the same thing.
+_remote_backend_name = (
+    "direct" if cfg.remote_mode == "direct" and _remote_direct.seam_available()
+    else "download")
 # Exception type(s) to treat as "couldn't reach the remote tablebase" in
 # the /probe and /probe/stream handlers below — a plain tuple (rather than
 # an `if` at each call site) so `except _REMOTE_SOURCE_ERRORS:` is valid
@@ -244,18 +263,34 @@ def request_too_large(e: Exception) -> tuple:
 
 try:
     if cfg.tablebase_path and _tablebase_is_remote:
-        # Remote (http/https) TABLEBASE_PATH. Each table is downloaded
-        # whole and cached in a temporary local directory the first time
-        # it's touched (see remote/remote_fallback.py's module docstring
-        # for why, and for how remote_page_cache_bytes bounds that).
-        TB = _remote.open_tablebase(
-            cfg.tablebase_path,
-            block_cache_bytes=cfg.block_cache_bytes,
-            remote_page_cache_bytes=cfg.remote_page_cache_bytes,
-            remote_page_size=cfg.remote_page_size_bytes,
-            remote_timeout=cfg.remote_timeout_secs,
-            remote_max_retries=cfg.remote_max_retries,
-        )
+        # Remote (http/https) TABLEBASE_PATH -- see the "ChessTB backend"
+        # section above. "direct" needs a chess.chesstb carrying the table
+        # source seam; without it the module can't work at all, so fall
+        # back rather than fail the whole app at startup.
+        if _remote_backend_name == "download":
+            if cfg.remote_mode == "direct":
+                log.warning(
+                    "REMOTE_MODE is \"direct\", but the installed chess.chesstb has no "
+                    "table-source seam (Tablebase.WDL_FILE / _TableFile._open_source) -- "
+                    "using \"download\" instead. Update the fork (see requirements.txt) "
+                    "to get byte-range probing.")
+            TB = _remote_download.open_tablebase(
+                cfg.tablebase_path,
+                block_cache_bytes=cfg.block_cache_bytes,
+                remote_page_cache_bytes=cfg.remote_page_cache_bytes,
+                remote_page_size=cfg.remote_page_size_bytes,
+                remote_timeout=cfg.remote_timeout_secs,
+                remote_max_retries=cfg.remote_max_retries,
+            )
+        else:
+            TB = _remote_direct.open_tablebase(
+                cfg.tablebase_path,
+                block_cache_bytes=cfg.block_cache_bytes,
+                remote_page_cache_bytes=cfg.remote_page_cache_bytes,
+                remote_page_size=cfg.remote_page_size_bytes,
+                remote_timeout=cfg.remote_timeout_secs,
+                remote_max_retries=cfg.remote_max_retries,
+            )
     elif cfg.tablebase_path:
         TB = chesstb.open_tablebase(cfg.tablebase_path, block_cache_bytes=cfg.block_cache_bytes)
     else:
@@ -263,10 +298,12 @@ try:
     if TB:
         if _tablebase_is_remote:
             log.info(
-                "Tablebase opened remotely at: %s (backend=standard/disk-cached, "
+                "Tablebase opened remotely at: %s (mode=%s, %s, "
                 "block_cache_bytes=%d, remote_page_cache_bytes=%d, "
                 "remote_page_size=%d)",
-                cfg.tablebase_path,
+                cfg.tablebase_path, _remote_backend_name,
+                "byte-range, nothing written to disk" if _remote_backend_name == "direct"
+                else "whole-file download, disk-cached",
                 cfg.block_cache_bytes, cfg.remote_page_cache_bytes,
                 cfg.remote_page_size_bytes,
             )
@@ -1017,6 +1054,7 @@ def cache_stats() -> Response:
             "block_cache_bytes":   cfg.block_cache_bytes,
         },
         "tablebase_source": "remote" if _tablebase_is_remote else "local",
+        "tablebase_remote_mode": _remote_backend_name if _tablebase_is_remote else None,
     }
     # Guarded with getattr rather than a TB-is-not-None check: TB is a
     # valid Tablebase either way, but cache_stats() only exists when TB is

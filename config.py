@@ -103,15 +103,37 @@ BLOCK_CACHE_BYTES = 64 * 1024 * 1024
 # only applies once TABLEBASE_PATH is an http(s):// URL (see above). See
 # remote/remote_fallback.py's module docstring for the full design.
 
-# Soft budget, in bytes, for the on-disk LRU cache of whole downloaded
-# table files, shared across every remote table opened this session.
+# How a remote table's bytes reach the prober:
+#
+#   "direct"   -- probe the remote tables in place, fetching only the
+#                 page-sized byte ranges each probe reads, nothing written
+#                 to disk (remote/remote_direct.py). Needs a chess.chesstb
+#                 new enough to have the table-source seam; if yours
+#                 doesn't, the app logs that and uses "download" instead.
+#   "download" -- fetch each table file in full on first touch and cache it
+#                 on local disk (remote/remote_fallback.py). Slower first
+#                 touch of a material and real disk usage, but every read
+#                 after it is a local mmap read.
+#
+# "direct" is the better default for browsing across many materials, which
+# is what this app does. Prefer "download" if you hammer a handful of
+# materials for a long session, or if your network's per-request latency is
+# high enough that many small requests hurt (one cold probe can issue
+# several, since a probe of a dropped-frame table walks its children).
+REMOTE_MODE = "direct"
+
+# Soft budget, in bytes, shared across every remote table opened this
+# session: bounds the in-memory page cache in "direct" mode, and the
+# on-disk cache of whole downloaded table files in "download" mode.
 REMOTE_PAGE_CACHE_BYTES = 128 * 1024 * 1024
 
-# Size, in bytes, of one chunk streamed at a time while downloading a
-# remote table file to its local cache (see REMOTE_PAGE_CACHE_BYTES
-# above) -- larger chunks mean fewer, bigger requests for that download;
-# it has no effect on which bytes end up fetched, since the whole file is
-# downloaded either way.
+# Size, in bytes, of one page. In "direct" mode this is the granularity of
+# every fetch, so it sets the trade between over-fetching (too large) and
+# many round trips per probe (too small) -- 256 KiB keeps a table's whole
+# header + index region within a page or two, which is what makes later
+# probes of the same table cheap. In "download" mode it is only the chunk
+# size used while streaming a full file down, and has no effect on which
+# bytes end up fetched.
 REMOTE_PAGE_SIZE_BYTES = 256 * 1024
 
 # Per-HTTP-request timeout, in seconds, for both existence/size checks and

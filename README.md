@@ -231,16 +231,30 @@ probe. Point `TABLEBASE_PATH` straight at that URL:
 TABLEBASE_PATH = "https://huggingface.co/buckets/noobpwnftw/chesstb/resolve"
 ```
 
-and the app probes tables over HTTP via `remote/remote_fallback.py`: the
-standard `chess.chesstb.Tablebase` only ever knows how to read a local
-path, so each table is downloaded **in full** the first time a probe
-touches its material, and cached in a temporary local directory (bounded
-by `REMOTE_PAGE_CACHE_BYTES`, evicting least-recently-used files once
-that budget is exceeded, and removed entirely when the app stops). Every
-probe after that first one is served from local disk with no further
-network round trip — in effect an on-demand cache built up as you probe,
-rather than a full local mirror. See `remote/remote_fallback.py`'s module
-docstring for the full design and why it works this way.
+and the app probes tables over HTTP. `REMOTE_MODE` picks how:
+
+- **`"direct"` (default)** — `remote/remote_direct.py` probes the remote
+  tables **in place**, fetching only the `REMOTE_PAGE_SIZE_BYTES`-sized
+  byte ranges each probe actually reads and keeping them in an in-memory
+  LRU bounded by `REMOTE_PAGE_CACHE_BYTES`. Nothing is written to disk.
+  This uses `chess.chesstb`'s table-source seam
+  (`Tablebase.WDL_FILE` / `_TableFile._open_source`); if your installed
+  fork predates it, the app logs that and falls back to `"download"`.
+- **`"download"`** — `remote/remote_fallback.py`, the original behaviour:
+  each table is downloaded **in full** the first time a probe touches its
+  material and cached in a temporary local directory (bounded by
+  `REMOTE_PAGE_CACHE_BYTES` as an on-disk budget, evicting
+  least-recently-used files, removed entirely when the app stops). Every
+  probe after the first is then a local mmap read.
+
+`"direct"` is the better default for browsing across many materials, which
+is what this app does. Prefer `"download"` when you hammer a handful of
+materials in one long session, or on a high-latency link: a ChessTB probe
+is not a narrow read — a dropped-frame table is reconstructed by walking
+its children, and pawn positions reach promotion sub-tables — so one cold
+probe can open several materials and issue several fetches against each.
+That is also why `REMOTE_PAGE_SIZE_BYTES` should stay large. See each
+module's docstring for the full design.
 
 This is a good fit for a machine that doesn't have (or doesn't want to
 dedicate) a couple of terabytes of local disk for the full tablebase set —
@@ -306,8 +320,9 @@ reference.
 | `EVALUATE_CACHE_SIZE`       | `4096`            | Max entries in the root-FEN result cache (full JSON responses). |
 | `PROBE_CACHE_SIZE`          | `16384`           | Max entries in the child-position probe cache (raw WDL/DTZ/DTM tuples). |
 | `BLOCK_CACHE_BYTES`         | `67108864` (64 MiB) | Size, in bytes, of `chesstb`'s own internal cache of decoded/decompressed tablebase blocks (shared across the WDL/DTC/DTM50 tables). Raising this trades RAM for fewer repeated disk reads/HTTP fetches + decompressions across a session — most worthwhile when `PROBE_PARALLEL_THRESHOLD` is set high enough that probing runs mostly serially. |
-| `REMOTE_PAGE_CACHE_BYTES`   | `134217728` (128 MiB) | **Remote `TABLEBASE_PATH` only.** Soft budget, in bytes, for the on-disk LRU cache of whole downloaded table files, shared across every remote table opened this session. See [Getting the tablebase files](#getting-the-tablebase-files). |
-| `REMOTE_PAGE_SIZE_BYTES`    | `262144` (256 KiB) | **Remote `TABLEBASE_PATH` only.** Size, in bytes, of one chunk streamed at a time while downloading a remote table to disk. |
+| `REMOTE_MODE`               | `"direct"`        | **Remote `TABLEBASE_PATH` only.** `"direct"` probes the remote tables in place over byte ranges (nothing written to disk); `"download"` fetches each table in full on first touch and caches it on local disk. Falls back to `"download"` if the installed `chess.chesstb` has no table-source seam. See [Getting the tablebase files](#getting-the-tablebase-files). |
+| `REMOTE_PAGE_CACHE_BYTES`   | `134217728` (128 MiB) | **Remote `TABLEBASE_PATH` only.** Soft budget, in bytes, shared across every remote table opened this session: the in-memory page cache in `"direct"` mode, the on-disk cache of whole downloaded files in `"download"` mode. See [Getting the tablebase files](#getting-the-tablebase-files). |
+| `REMOTE_PAGE_SIZE_BYTES`    | `262144` (256 KiB) | **Remote `TABLEBASE_PATH` only.** Size, in bytes, of one page. In `"direct"` mode this is the granularity of every fetch, so it trades over-fetching against round trips per probe; in `"download"` mode it is only the chunk size used while streaming a full file down. |
 | `REMOTE_TIMEOUT_SECS`       | `20`              | **Remote `TABLEBASE_PATH` only.** Per-HTTP-request timeout for existence/size checks and the download itself. |
 | `REMOTE_MAX_RETRIES`        | `3`               | **Remote `TABLEBASE_PATH` only.** Attempts for a single remote request before it's treated as failed. |
 
@@ -432,8 +447,9 @@ curl -X POST http://127.0.0.1:5000/probe \
 ├── requirements.txt
 ├── README.md
 ├── remote/
-│   ├── remote_source.py     # Generic HTTP byte-range client used by remote_fallback.py — see its own module docstring
-│   └── remote_fallback.py   # Remote (URL) TABLEBASE_PATH support for chess.chesstb, downloaded and cached to local disk on first touch — see its own module docstring
+│   ├── remote_source.py     # Generic HTTP byte-range client shared by both remote backends — see its own module docstring
+│   ├── remote_direct.py     # REMOTE_MODE="direct": probe remote tables in place over byte ranges — see its own module docstring
+│   └── remote_fallback.py   # REMOTE_MODE="download": whole-file download, cached to local disk on first touch — see its own module docstring
 ├── templates/
 │   ├── index.html          # Main explorer UI
 │   └── admin.html          # Cache dashboard
@@ -498,7 +514,7 @@ curl -X POST http://127.0.0.1:5000/probe \
 | Probing feels slow on positions with many legal moves, or doesn't scale with `PROBE_THREADS` | Tune `PROBE_THREADS`, `PROBE_PARALLEL_THRESHOLD`, and `PROBE_TIMEOUT_SECS` in `config.py`. Note that `chess.chesstb` has no locking around opening a not-yet-seen tablebase (see [Installation](#installation) step 2), so several threads racing to open the same never-before-seen material can each do a redundant read — this only affects the very first probe against any given material. |
 | `ModuleNotFoundError: No module named 'waitress'` | Your environment predates the waitress dependency — re-run `pip install -r requirements.txt` to pick it up. `app.py` imports waitress unconditionally at the top of the file, before `config.DEBUG` is even read, so setting `DEBUG = True` does **not** avoid this — waitress has to be installed either way. |
 | Every probe on a remote `TABLEBASE_PATH` returns "Position not covered..." or `/health` is `degraded` | Confirm the URL is reachable and correct (try opening `TABLEBASE_PATH/wdl/KQK.lzw` — or any small material's `.lzw` — directly in a browser). Check the startup log's "Tablebase opened remotely at: ..." line (or a warning in its place) for the actual failure. |
-| Remote probing feels slow, or repeated probes against the same material keep hitting the network | Check `REMOTE_TIMEOUT_SECS`/`REMOTE_MAX_RETRIES` aren't causing retries on a slow link, and consider raising `REMOTE_PAGE_CACHE_BYTES` — a too-small budget evicts cached downloaded files before later probes can reuse them. `/admin`'s cache stats surface this as `remote_disk_cache`. See [Configuration reference](#configuration-reference). |
+| Remote probing feels slow, or repeated probes against the same material keep hitting the network | Check `REMOTE_TIMEOUT_SECS`/`REMOTE_MAX_RETRIES` aren't causing retries on a slow link, and consider raising `REMOTE_PAGE_CACHE_BYTES` — a too-small budget evicts cached pages (`"direct"`) or downloaded files (`"download"`) before later probes can reuse them. `GET /admin/cache/stats` surfaces this as `tablebase_cache.remote_page_cache` or `.remote_disk_cache` respectively, alongside `tablebase_remote_mode`. On a high-latency link also try raising `REMOTE_PAGE_SIZE_BYTES`, or `REMOTE_MODE = "download"`. See [Configuration reference](#configuration-reference). |
 
 ---
 
@@ -506,7 +522,7 @@ curl -X POST http://127.0.0.1:5000/probe \
 
 - Tablebase data & format: [ChessTB / chessdb.cn](https://www.chessdb.cn/)
 - Tablebase probing support: [noobpwnftw/python-chess (`add-chesstb-tablebases` branch)](https://github.com/noobpwnftw/python-chess/tree/add-chesstb-tablebases), a fork of [niklasf/python-chess](https://github.com/niklasf/python-chess)
-- Remote (URL) `TABLEBASE_PATH` support for the fork's `chess.chesstb` module — see `remote/remote_source.py` and `remote/remote_fallback.py`
+- Remote (URL) `TABLEBASE_PATH` support for the fork's `chess.chesstb` module — see `remote/remote_source.py`, `remote/remote_direct.py` and `remote/remote_fallback.py`
 - Board UI: [Chessground](https://github.com/lichess-org/chessground) (GPL-3.0-or-later — see `THIRD_PARTY_LICENSES.md`)
 - Move generation/validation on the client: [chess.js](https://github.com/jhlywa/chess.js)
 - Production WSGI server: [waitress](https://docs.pylonsproject.org/projects/waitress/)
