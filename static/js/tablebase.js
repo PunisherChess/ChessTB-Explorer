@@ -381,12 +381,20 @@ const Tablebase = (() => {
         if (es) es.style.display = 'none';
     }
 
+    // A result carrying "unknown" moves is one the server couldn't fully
+    // resolve (probe timeout / transient fetch error). Caching it here would
+    // pin those unknowns to the position for the rest of the page's life,
+    // since a revisit is served from cache and never re-probes.
+    function _isComplete(data) {
+        return !(data && data.summary && data.summary.unknown > 0);
+    }
+
     function _applyResults(data, fen) {
         _clearLoading();
         _hideProgress();
         _lastData = data;
         _lastFen  = fen;
-        _resultCache.set(fen, data);
+        if (_isComplete(data)) _resultCache.set(fen, data);
 
         const movesDtz   = data.moves_dtz   || [];
         const movesDtm   = data.moves_dtm   || [];
@@ -691,7 +699,10 @@ const Tablebase = (() => {
                             if (!l.startsWith('data: ')) continue;
                             try {
                                 const d = JSON.parse(l.slice(6));
-                                if (d.status === 'done') { _prefetchCache.set(childFen, d); return; }
+                                if (d.status === 'done') {
+                                    if (_isComplete(d)) _prefetchCache.set(childFen, d);
+                                    return;
+                                }
                                 if (d.status === 'error') return;
                             } catch { /**/ }
                         }

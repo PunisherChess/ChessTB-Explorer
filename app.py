@@ -529,10 +529,73 @@ def _probe_board(board: chess.Board) -> tuple[int, int, int, int, int] | None:
 
 # ── Child-position probe cache ────────────────────────────────────────────────
 
+class ProbeInFlightTimeout(Exception):
+    """A probe of this FEN was already running and didn't finish in time.
+    Retryable, exactly like the probe having timed out directly."""
+
+
+class _InFlightProbe:
+    """Slot for one probe in progress. The thread that creates it does the
+    probing; every other thread asking for the same FEN waits on it."""
+
+    __slots__ = ("done", "result", "error")
+
+    def __init__(self) -> None:
+        self.done   = threading.Event()
+        self.result: tuple[int, int, int, int, int] | None = None
+        self.error:  BaseException | None = None
+
+
+_inflight_lock = threading.Lock()
+_inflight: dict[str, _InFlightProbe] = {}
+
+
+def _probe_fen_deduped(fen: str) -> tuple[int, int, int, int, int] | None:
+    """Runs at most one probe per FEN at a time, however many callers ask.
+
+    _probe_fen's lru_cache only dedupes probes that have already *finished* —
+    concurrent callers all miss it and all probe the same position. That
+    happens routinely: /probe/stream pre-warms a child FEN that
+    evaluate_all_moves then asks for again, and a retry after a timeout
+    re-asks for a FEN whose first probe is still running. Each duplicate costs
+    a full remote probe and occupies a pool worker.
+
+    The wait is bounded by cfg.probe_timeout so one hung probe can't pin every
+    waiter indefinitely; the wait expiring raises, which reads downstream as a
+    retryable failure just like the probe itself timing out.
+    """
+    with _inflight_lock:
+        slot = _inflight.get(fen)
+        if slot is None:
+            slot = _inflight[fen] = _InFlightProbe()
+            owner = True
+        else:
+            owner = False
+
+    if not owner:
+        if not slot.done.wait(cfg.probe_timeout):
+            raise ProbeInFlightTimeout(f"Timed out waiting on an in-flight probe of {fen}")
+        if slot.error is not None:
+            raise slot.error
+        return slot.result
+
+    try:
+        slot.result = _probe_board(chess.Board(fen))
+        return slot.result
+    except BaseException as exc:
+        slot.error = exc
+        raise
+    finally:
+        # Drop the slot before waking the waiters, so a caller arriving in
+        # between starts a fresh probe rather than joining a finished one.
+        with _inflight_lock:
+            _inflight.pop(fen, None)
+        slot.done.set()
+
+
 @lru_cache(maxsize=cfg.probe_cache_size)
 def _probe_fen(fen: str) -> tuple[int, int, int, int, int] | None:
-    board = chess.Board(fen)
-    return _probe_board(board)
+    return _probe_fen_deduped(fen)
 
 
 # ── Move evaluation ───────────────────────────────────────────────────────────
@@ -578,7 +641,11 @@ def evaluate_all_moves(
     root_wdl: int,
     bypass_parallel: bool = False,
     precomputed_move_info: list[tuple[str, bool, bool, str | None, str | None]] | None = None,
-) -> tuple[MoveList, MoveList, MoveList]:
+) -> tuple[MoveList, MoveList, MoveList, bool]:
+    """Returns the three ranked move lists plus a "complete" flag: False when
+    at least one move shows "unknown" for a retryable reason (probe timeout or
+    error) rather than because its table is genuinely absent. Callers use it to
+    decide whether the result is worth caching — see evaluate_fen()."""
 
     # Phase 1: collect move metadata (no TB calls) — reuses the caller's own
     # pass over board.legal_moves() when one is supplied, instead of
@@ -588,6 +655,13 @@ def evaluate_all_moves(
     # Phase 2: probe child positions
     unique_fens: set[str] = {child_fen for _, _, _, _, child_fen in move_info if child_fen is not None}
     probe_cache: dict[str, tuple | None] = {}
+
+    # Child FENs that failed for a retryable reason. A probe that timed out is
+    # still running in the pool and will populate _probe_fen's own cache, so a
+    # later attempt at this position resolves it; a probe that raised may
+    # succeed on a retry too. Neither is the same as _probe_fen returning None,
+    # which means tb_not_found and won't change however often it's re-probed.
+    transient_failures: set[str] = set()
 
     # Bypass thread-pool and execute sequentially if we know child FENs are cached
     if len(unique_fens) >= cfg.parallel_threshold and not bypass_parallel:
@@ -602,9 +676,11 @@ def evaluate_all_moves(
                 except Exception as exc:
                     log.warning("Probe error for %s: %s", fen, exc)
                     probe_cache[fen] = None
+                    transient_failures.add(fen)
             else:
                 log.warning("Probe timed out for %s", fen)
                 probe_cache[fen] = None
+                transient_failures.add(fen)
     else:
         for fen in unique_fens:
             try:
@@ -612,6 +688,7 @@ def evaluate_all_moves(
             except Exception as exc:
                 log.warning("Probe error for %s: %s", fen, exc)
                 probe_cache[fen] = None
+                transient_failures.add(fen)
 
     # Phase 3: assemble and sort
     dtz_rows:   list[tuple] = []
@@ -700,6 +777,7 @@ def evaluate_all_moves(
         [r[1] for r in dtz_rows],
         [r[1] for r in dtm_rows],
         [r[1] for r in dtm50_rows],
+        not transient_failures,
     )
 
 
@@ -754,8 +832,15 @@ def _missing_table_error_payload(fen: str) -> dict:
     }
 
 
-@lru_cache(maxsize=cfg.evaluate_cache_size)
-def evaluate_fen(fen: str) -> str:
+class _IncompleteResult(Exception):
+    """Carries a probe result that must not be cached — see evaluate_fen()."""
+
+    def __init__(self, json_str: str) -> None:
+        super().__init__("probe incomplete")
+        self.json_str = json_str
+
+
+def _evaluate_fen_impl(fen: str) -> str:
     """
     Probes the tablebase for a root FEN and returns a pre-serialized JSON string.
     Routes the root probe through the same shared _probe_fen cache used for
@@ -769,6 +854,10 @@ def evaluate_fen(fen: str) -> str:
     its progress bar — hands them over via _evaluate_tls instead, letting
     this call skip redoing that work. Ignored on a cache hit, since the
     function body below never runs in that case.
+
+    Raises _IncompleteResult (carrying the same JSON) when a move came back
+    unknown for a retryable reason, so evaluate_fen() can serve it without
+    caching it.
     """
     precomputed_board     = getattr(_evaluate_tls, "board", None)
     precomputed_move_info = getattr(_evaluate_tls, "move_info", None)
@@ -797,7 +886,7 @@ def evaluate_fen(fen: str) -> str:
     root_wdl, root_dtm50_wdl, root_dtc, root_dtm, root_dtm50 = root
 
     bypass_parallel = getattr(_evaluate_tls, "bypass_parallel", False)
-    moves_dtz, moves_dtm, moves_dtm50 = evaluate_all_moves(
+    moves_dtz, moves_dtm, moves_dtm50, complete = evaluate_all_moves(
         board, root_wdl, bypass_parallel=bypass_parallel, precomputed_move_info=precomputed_move_info,
     )
 
@@ -810,7 +899,7 @@ def evaluate_fen(fen: str) -> str:
         "unknown": sum(1 for o in outcomes if o == "unknown"),
     }
 
-    return json.dumps({
+    json_str = json.dumps({
         "wdl":          root_wdl,
         "dtz":          root_dtc,
         "dtm":          root_dtm,
@@ -821,6 +910,32 @@ def evaluate_fen(fen: str) -> str:
         "summary":      summary,
         "draw_reason":  None,   # root always has legal moves here, so never terminal
     })
+    if not complete:
+        raise _IncompleteResult(json_str)
+    return json_str
+
+
+# The cache lives on the inner function only: lru_cache never stores the result
+# of a call that raised, so an _IncompleteResult passes straight through to the
+# caller without being memoized, and the next request for that FEN re-probes.
+# By then the timed-out probes have usually landed in _probe_fen's own cache,
+# so the retry is both cheap and likely to resolve. Without this a single
+# timeout pinned "unknown" to a position for the rest of the process, with
+# /admin/cache/clear the only way out.
+@lru_cache(maxsize=cfg.evaluate_cache_size)
+def _evaluate_fen_cached(fen: str) -> str:
+    return _evaluate_fen_impl(fen)
+
+
+def evaluate_fen(fen: str) -> str:
+    try:
+        return _evaluate_fen_cached(fen)
+    except _IncompleteResult as incomplete:
+        return incomplete.json_str
+
+
+evaluate_fen.cache_clear = _evaluate_fen_cached.cache_clear  # type: ignore[attr-defined]
+evaluate_fen.cache_info  = _evaluate_fen_cached.cache_info   # type: ignore[attr-defined]
 
 
 # ── Common FEN extraction + validation helper ─────────────────────────────────
@@ -876,6 +991,13 @@ def probe() -> Response:
             "error": "Could not reach the remote tablebase. Try again shortly.",
             "error_code": "remote_unavailable",
         }), 502
+
+    except ProbeInFlightTimeout as e:
+        log.warning("%s", e)
+        return jsonify({
+            "error": "Probe timed out. Try again shortly.",
+            "error_code": "probe_timeout",
+        }), 503
 
     except Exception:
         log.exception("Unhandled error probing FEN: %s", fen)
@@ -963,6 +1085,13 @@ def probe_stream() -> Response:
                 "status": "error",
                 "error": "Could not reach the remote tablebase. Try again shortly.",
                 "error_code": "remote_unavailable",
+            })
+        except ProbeInFlightTimeout as e:
+            log.warning("%s", e)
+            yield _sse({
+                "status": "error",
+                "error": "Probe timed out. Try again shortly.",
+                "error_code": "probe_timeout",
             })
         except Exception as e:
             log.exception("Error in probe/stream for %s", fen)
