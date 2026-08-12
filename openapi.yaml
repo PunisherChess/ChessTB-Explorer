@@ -44,7 +44,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: Tablebase not initialised (TABLEBASE_PATH unset or failed to load)
+          description: >-
+            Two distinct causes, both with this status code: (1) tablebase
+            not initialised (TABLEBASE_PATH unset or failed to load) — no
+            error_code is set on the response body in this case; (2) an
+            in-flight probe of this FEN by another concurrent request didn't
+            finish within PROBE_TIMEOUT_SECS (error_code=probe_timeout).
+            Retrying may succeed for case (2).
           content:
             application/json:
               schema:
@@ -60,7 +66,10 @@ paths:
         Identical to /probe but returns text/event-stream.
         Each SSE event has a JSON payload in its data field.
         Events are emitted as child positions are probed, followed by the
-        final result or an error event.
+        final result or an error event. An error event with
+        error_code=probe_timeout means a concurrent request was already
+        probing the same FEN and didn't finish in time; retrying is
+        usually cheap and likely to resolve.
       requestBody:
         required: true
         content:
@@ -208,11 +217,15 @@ components:
           description: Human-readable error message
         error_code:
           type: string
-          enum: [missing_table, remote_unavailable]
+          enum: [missing_table, remote_unavailable, probe_timeout]
           description: >-
             Machine-readable error code (only present for specific errors).
             remote_unavailable only occurs with a remote (URL)
             TABLEBASE_PATH, when its HTTP source couldn't be reached.
+            probe_timeout means a concurrent request was already probing
+            this same FEN and didn't finish within PROBE_TIMEOUT_SECS;
+            retrying is generally cheap and likely to succeed, since the
+            original probe has usually finished and been cached by then.
         piece_count:
           type: integer
           nullable: true
@@ -237,5 +250,5 @@ components:
       properties:
         status: {type: string, enum: [error]}
         error: {type: string}
-        error_code: {type: string, enum: [missing_table, remote_unavailable]}
+        error_code: {type: string, enum: [missing_table, remote_unavailable, probe_timeout]}
         piece_count: {type: integer, nullable: true}

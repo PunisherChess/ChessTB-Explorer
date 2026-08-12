@@ -109,12 +109,10 @@ and cached to local disk on first touch per material — see
 remote/remote_fallback.py and "Getting the tablebase files" below)
 ```
 
-This covers the main explorer page's (`index.html`) module graph. Two
-files aren't pictured: `admin.js`, a separate, smaller client script for
-the `/admin` dashboard page rather than something `ui.js` wires in above,
-and `utils.js`, a tiny shared helper (`debounce`) imported by a couple of
-the modules above rather than a module in its own right. See
-[Project structure](#project-structure) below for the complete file set.
+This covers the main explorer page's (`index.html`) module graph — see
+[Project structure](#project-structure) below for the complete file set,
+including `admin.js` (the `/admin` dashboard's client script) and
+`utils.js` (a small shared helper).
 
 Each module carries a file-level docstring/header comment describing its
 own responsibilities, and the move-ranking algorithm itself — including
@@ -158,16 +156,7 @@ above `evaluate_all_moves()` and the `_effective_move_wdl`/
 
    This pulls in the **modified `python-chess` fork** (not the plain
    PyPI `chess` package; see the comments in `requirements.txt` for why
-   that distinction matters). Note that the fork as published has no
-   locking around opening a not-yet-seen tablebase and reads whole table
-   files into memory per call, so several probe threads hitting the same
-   never-before-seen material at the same time can each do a redundant
-   full read/parse — a one-time cost per material on its very first
-   probe; every later probe against that material is served from the
-   fork's own cache with no such duplication. Tune `PROBE_THREADS` /
-   `PROBE_PARALLEL_THRESHOLD` (see
-   [Configuration reference](#configuration-reference)) if this matters
-   for your workload.
+   that distinction matters).
 
 3. **Get the tablebase files** — see the next section. If you're using the
    remote (no-download) option, there's nothing to fetch here at all —
@@ -189,9 +178,7 @@ above `evaluate_all_moves()` and the `_effective_move_wdl`/
    Every other setting in `config.py` has a sensible default and a
    comment explaining what it does — see
    [Configuration reference](#configuration-reference) for the complete
-   list. Nothing in `config.py` is a secret, so there's no template to
-   copy or file to keep out of version control — just edit the values in
-   place.
+   list. Just open the file and edit the values directly.
 
 5. **Run the app:**
 
@@ -240,9 +227,9 @@ and the app probes tables over HTTP. `REMOTE_MODE` picks how:
   This uses `chess.chesstb`'s table-source seam
   (`Tablebase.WDL_FILE` / `_TableFile._open_source`); if your installed
   fork predates it, the app logs that and falls back to `"download"`.
-- **`"download"`** — `remote/remote_fallback.py`, the original behaviour:
-  each table is downloaded **in full** the first time a probe touches its
-  material and cached in a temporary local directory (bounded by
+- **`"download"`** — `remote/remote_fallback.py` fetches each table
+  **in full** the first time a probe touches its material and caches it
+  in a temporary local directory (bounded by
   `REMOTE_PAGE_CACHE_BYTES` as an on-disk budget, evicting
   least-recently-used files, removed entirely when the app stops). Every
   probe after the first is then a local mmap read.
@@ -301,11 +288,9 @@ and `/health` reports `"degraded"`.
 
 ## Configuration reference
 
-All configuration lives in **`config.py`**, as plain Python values — there's
-no `.env` file, no environment variables, and nothing to copy from a
-template. Open it and edit the values directly; each one has a comment
-above it explaining what it does. The table below is the complete
-reference.
+All configuration lives in **`config.py`**, as plain Python values. Open
+it and edit the settings directly — each one has a comment above it
+explaining what it does. The table below is the complete reference.
 
 | Setting                     | Default          | Description |
 |-----------------------------|-------------------|-------------|
@@ -316,7 +301,7 @@ reference.
 | `WAITRESS_THREADS`          | `8`               | Worker threads in waitress's request-handling pool. Only relevant when `DEBUG = False`. Needs to be more than 1 so a long-lived `/probe/stream` connection can't block other requests. |
 | `PROBE_THREADS`             | `None` (→ `min(16, cpu*2)`) | Worker threads in the probe thread pool used to evaluate a position's legal moves in parallel. Left as `None` to scale with the host machine automatically; set an explicit integer to override. |
 | `PROBE_PARALLEL_THRESHOLD`  | `4`               | Minimum number of child positions before probing switches from sequential to the thread pool. |
-| `PROBE_TIMEOUT_SECS`        | `30`              | Wall-clock timeout for a batch of parallel child probes. |
+| `PROBE_TIMEOUT_SECS`        | `30`              | Wall-clock timeout for a batch of parallel child probes. Also bounds how long a request waits on another thread's in-flight probe of the same FEN before giving up with a retryable `probe_timeout` error. |
 | `EVALUATE_CACHE_SIZE`       | `4096`            | Max entries in the root-FEN result cache (full JSON responses). |
 | `PROBE_CACHE_SIZE`          | `16384`           | Max entries in the child-position probe cache (raw WDL/DTZ/DTM tuples). |
 | `BLOCK_CACHE_BYTES`         | `67108864` (64 MiB) | Size, in bytes, of `chesstb`'s own internal cache of decoded/decompressed tablebase blocks (shared across the WDL/DTC/DTM50 tables). Raising this trades RAM for fewer repeated disk reads/HTTP fetches + decompressions across a session — most worthwhile when `PROBE_PARALLEL_THRESHOLD` is set high enough that probing runs mostly serially. |
@@ -364,11 +349,10 @@ python app.py
   parallelise tablebase probing rather than to serve HTTP requests.
 - Waitress handles `/probe/stream`'s streamed response natively; no
   additional configuration is needed for SSE to work correctly.
-- This app is designed for **single-user, local use** and has no
-  built-in authentication anywhere (see [Security notes](#security-notes)).
-  If you do need to reach it from another machine, put your own access
-  control (a reverse proxy with auth, a VPN, a firewall rule) in front of
-  it — don't just widen `HOST` and expose it directly.
+- This app has no built-in authentication (see
+  [Security notes](#security-notes)) — if you need to reach it from
+  another machine, put access control in front of it rather than just
+  widening `HOST`.
 
 ---
 
@@ -437,8 +421,6 @@ curl -X POST http://127.0.0.1:5000/probe \
 
 ```
 .
-├── .gitattributes          # Forces LF line endings for text files across Windows/Linux/macOS clones
-├── .gitignore              # Excludes the test suite and the usual Python/editor cruft
 ├── LICENSE                 # This project's own license (see file for scope — does not cover bundled third-party assets)
 ├── THIRD_PARTY_LICENSES.md # Licenses/attributions for bundled third-party code, fonts, piece sets, and board images
 ├── app.py                  # Flask backend: routes, probing, caching
@@ -494,9 +476,8 @@ curl -X POST http://127.0.0.1:5000/probe \
   `Referrer-Policy: strict-origin-when-cross-origin` are set alongside it.
   Request bodies are capped at 4 KB.
 - `config.py` holds no secrets — there's no API key, password, or
-  credential anywhere in this app — so unlike a typical `.env` file it's
-  safe to commit as-is and edit in place; there's nothing to keep out of
-  version control.
+  credential anywhere in this app — so it's safe to commit as-is and
+  edit in place.
 
 ---
 
@@ -508,12 +489,13 @@ curl -X POST http://127.0.0.1:5000/probe \
 | A FEN is rejected with "Invalid castling availability" (backend) or "Castling rights are not supported" (board UI) | The submitted castling-availability field is something other than `-`. The loaded tablebases carry no castling-rights information, so this field must always be `-`, even if the king and rook in the position happen to sit on their home squares. |
 | `/health` returns `503 degraded` | The tablebase failed to open — check `TABLEBASE_PATH` and file permissions. |
 | `ModuleNotFoundError: No module named 'chess.chesstb'` | Plain PyPI `chess` was installed instead of the fork. Re-run `pip install -r requirements.txt` and confirm it pulled `chess` from `noobpwnftw/python-chess` (the `add-chesstb-tablebases` branch) rather than plain PyPI `chess` — see the note at the top of `requirements.txt`. |
-| `ModuleNotFoundError: No module named 'config'` | `config.py` is missing from alongside `app.py` — it ships with the repository and should never be deleted, only edited. Restore it (e.g. `git checkout config.py`) and re-apply any local changes. |
+| `ModuleNotFoundError: No module named 'config'` | `config.py` is missing from alongside `app.py`. It ships with the repository — if it was deleted or moved, restore it from the repo (or re-clone) and re-apply any edits, such as `TABLEBASE_PATH`. |
 | App logs `Configuration error: ...` and exits immediately | A value in `config.py` is the wrong type or out of range for that setting (e.g. a string where an integer is expected, or a negative cache size) — the error message names which setting and why. Fix it in `config.py` and re-run `python app.py`. |
 | Admin dashboard panels stuck on "Loading…" | Check the browser console for a CSP violation, or that the app itself is actually running and reachable at the URL you're loading `/admin` from. |
-| Probing feels slow on positions with many legal moves, or doesn't scale with `PROBE_THREADS` | Tune `PROBE_THREADS`, `PROBE_PARALLEL_THRESHOLD`, and `PROBE_TIMEOUT_SECS` in `config.py`. Note that `chess.chesstb` has no locking around opening a not-yet-seen tablebase (see [Installation](#installation) step 2), so several threads racing to open the same never-before-seen material can each do a redundant read — this only affects the very first probe against any given material. |
+| Probing feels slow on positions with many legal moves, or doesn't scale with `PROBE_THREADS` | Tune `PROBE_THREADS`, `PROBE_PARALLEL_THRESHOLD`, and `PROBE_TIMEOUT_SECS` in `config.py`. Note that `chess.chesstb` has no locking around opening a not-yet-seen tablebase, so several threads racing to open the same never-before-seen material can each do a redundant read — this only affects the very first probe against any given material. |
 | `ModuleNotFoundError: No module named 'waitress'` | Your environment predates the waitress dependency — re-run `pip install -r requirements.txt` to pick it up. `app.py` imports waitress unconditionally at the top of the file, before `config.DEBUG` is even read, so setting `DEBUG = True` does **not** avoid this — waitress has to be installed either way. |
 | Every probe on a remote `TABLEBASE_PATH` returns "Position not covered..." or `/health` is `degraded` | Confirm the URL is reachable and correct (try opening `TABLEBASE_PATH/wdl/KQK.lzw` — or any small material's `.lzw` — directly in a browser). Check the startup log's "Tablebase opened remotely at: ..." line (or a warning in its place) for the actual failure. |
+| A probe occasionally returns `503` with `error_code: "probe_timeout"` | Another concurrent request was already probing the same position and didn't finish within `PROBE_TIMEOUT_SECS`. This is transient and retryable — the original probe has usually landed in the child-probe cache by the time you retry, so the retry is cheap. Frequent occurrences suggest raising `PROBE_TIMEOUT_SECS`, or that a slow remote `TABLEBASE_PATH` is the underlying bottleneck. |
 | Remote probing feels slow, or repeated probes against the same material keep hitting the network | Check `REMOTE_TIMEOUT_SECS`/`REMOTE_MAX_RETRIES` aren't causing retries on a slow link, and consider raising `REMOTE_PAGE_CACHE_BYTES` — a too-small budget evicts cached pages (`"direct"`) or downloaded files (`"download"`) before later probes can reuse them. `GET /admin/cache/stats` surfaces this as `tablebase_cache.remote_page_cache` or `.remote_disk_cache` respectively, alongside `tablebase_remote_mode`. On a high-latency link also try raising `REMOTE_PAGE_SIZE_BYTES`, or `REMOTE_MODE = "download"`. See [Configuration reference](#configuration-reference). |
 
 ---
@@ -523,7 +505,7 @@ curl -X POST http://127.0.0.1:5000/probe \
 - Tablebase data & format: [ChessTB / chessdb.cn](https://www.chessdb.cn/)
 - Tablebase probing support: [noobpwnftw/python-chess (`add-chesstb-tablebases` branch)](https://github.com/noobpwnftw/python-chess/tree/add-chesstb-tablebases), a fork of [niklasf/python-chess](https://github.com/niklasf/python-chess)
 - Remote (URL) `TABLEBASE_PATH` support for the fork's `chess.chesstb` module — see `remote/remote_source.py`, `remote/remote_direct.py` and `remote/remote_fallback.py`
-- Board UI: [Chessground](https://github.com/lichess-org/chessground) (GPL-3.0-or-later — see `THIRD_PARTY_LICENSES.md`)
+- Board UI: [Chessground](https://github.com/lichess-org/chessground)
 - Move generation/validation on the client: [chess.js](https://github.com/jhlywa/chess.js)
 - Production WSGI server: [waitress](https://docs.pylonsproject.org/projects/waitress/)
 - Piece sets and board images are the commonly-used community sets found
