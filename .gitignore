@@ -1,0 +1,19 @@
+# Local environment files — this project doesn't use one (config.py is
+# plain, non-secret, and meant to be committed — see its own docstring),
+# but this stays as a no-cost safety net in case one is ever added locally.
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

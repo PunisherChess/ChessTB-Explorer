@@ -104,9 +104,10 @@ Flask app (app.py)
 chesstb.open_tablebase(TABLEBASE_PATH)   (noobpwnftw's modified python-chess fork)
         │
         ▼
-ChessTB tablebase files — local disk, or a remote http(s) URL (downloaded
-and cached to local disk on first touch per material — see
-remote/remote_fallback.py and "Getting the tablebase files" below)
+ChessTB tablebase files — local disk, or a remote http(s) URL (probed
+in place over byte ranges by default, or downloaded and cached to local
+disk per material — see remote/remote_direct.py, remote/remote_fallback.py,
+and "Getting the tablebase files" below)
 ```
 
 This covers the main explorer page's (`index.html`) module graph — see

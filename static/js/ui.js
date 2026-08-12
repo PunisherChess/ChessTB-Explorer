@@ -1098,8 +1098,8 @@ const UI = (() => {
         // not the start of that game's move line.
         // immediate=true: this is the very first probe of the session, so
         // there's no prior in-flight probe for the 300ms debounce to guard
-        // against — going through it here just added a flat 300ms of dead
-        // time before the page's first result ever appeared.
+        // against — skipping it here avoids a flat 300ms of dead time
+        // before the page's first result appears.
         onPositionChange(Board.currentFen(), false, true);
     }
 

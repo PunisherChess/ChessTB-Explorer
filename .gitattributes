@@ -1,0 +1,45 @@
+# ChessTB Explorer — line-ending / diff attributes
+#
+# Every text file in this repo is normalized to LF, regardless of the
+# committer's or cloner's platform or local `core.autocrlf` setting — the
+# app is meant to run identically on Windows/Linux/macOS, and mixed line
+# endings across files (or within one file after a Windows edit) cause
+# noisy whole-file diffs and spurious merge conflicts for no functional
+# reason. Binary assets are marked explicitly so Git never attempts text
+# normalization or diffing on them.
+
+# Fallback: let Git auto-detect text vs binary for anything not matched
+# below, and normalize any text file's line endings to LF in the
+# repository (working-tree endings still follow core.autocrlf locally).
+* text=auto eol=lf
+
+# --- Source / config / docs — force LF explicitly -------------------------
+*.py       text eol=lf
+*.js       text eol=lf
+*.mjs      text eol=lf
+*.css      text eol=lf
+*.html     text eol=lf
+*.md       text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.txt      text eol=lf
+*.json     text eol=lf
+*.svg      text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+LICENSE        text eol=lf
+
+# --- Binary assets — never touch, never diff as text -----------------------
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.woff2  binary
+*.woff   binary
+*.ttf    binary
+*.ico    binary
+
+# --- Vendored third-party code — exclude from GitHub's language stats and
+# from generated-diff/review noise; these files are never hand-edited here,
+# only replaced wholesale when upgrading the vendored version.
+# See THIRD_PARTY_LICENSES.md for what's vendored and why.
+static/vendor/** linguist-vendored

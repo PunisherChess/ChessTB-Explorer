@@ -1,114 +1,115 @@
-# Third-Party Licenses & Attributions
+# Third-Party Notices
 
-ChessTB Explorer's own code (see `LICENSE`) bundles or depends on the
-third-party components listed below. This file documents each one so you
-know what you're redistributing if you ship, sell, or publicly deploy this
-project. **This is not legal advice** — if you plan to distribute this
-software commercially or publicly, have the flagged items below reviewed
-by a lawyer.
+This project bundles or depends on the third-party components listed
+below. Each entry states the component, version, SPDX license
+identifier, and source. This document is provided for attribution and
+license-compliance purposes only and does not constitute legal advice;
+consult qualified counsel before distributing, selling, or publicly
+deploying this software.
 
-## Read this first — four components with real restrictions
+All other files in this repository — `app.py`, `config.py`,
+`static/js/*.js`, `static/css/main.css`, `templates/*.html`, `remote/` —
+are original and licensed under the terms in [`LICENSE`](LICENSE).
 
-1. **Backend: `python-chess` fork (`chess` / `chess.chesstb`)** —
-   **GPL-3.0-or-later**. `app.py` imports the base `chess` package
-   directly (`import chess`, for `chess.Board` and move generation) and
-   also imports `chess.chesstb` directly for tablebase probing — see
-   `requirements.txt`. Under the FSF's interpretation of the GPL,
-   directly importing a GPL-licensed library like this generally makes
-   the combined program a "derivative work" that must be distributed
-   under GPL-3.0 terms if you distribute it at all. Running the app
-   privately/internally isn't "distribution" and doesn't trigger this. If
-   you plan to give copies of this app to others, plan around GPL-3.0
-   compliance for the whole thing.
+## Summary
 
-2. **Board textures (`static/boards/blue3.jpg`, `wood4.jpg`, `leather.jpg`)** —
-   **AGPL-3.0-or-later**, as part of lichess.org's `lila` codebase
-   (`public/images/board`, credited to the lila authors and pirouetti). AGPL
-   extends copyleft to network use — offering the app as a network service
-   can itself count as distribution under AGPL. If you deploy this
-   publicly, treat these three images the same way you'd treat any other
-   AGPL-licensed asset.
+| Component | Version | License (SPDX) | Category |
+|---|---|---|---|
+| [Chessground](https://github.com/lichess-org/chessground) | 10.1.1 | `GPL-3.0-or-later` | Frontend |
+| [chess.js](https://github.com/jhlywa/chess.js) | 1.4.0 | `BSD-2-Clause` | Frontend |
+| [Inter](https://rsms.me/inter/) | — | `OFL-1.1` | Font |
+| [JetBrains Mono](https://www.jetbrains.com/lp/mono/) | — | `OFL-1.1` | Font |
+| cburnett piece set | — | `GPL-2.0-or-later` | Asset |
+| kosal piece set | — | `CC-BY-4.0` | Asset |
+| maestro piece set | — | `CC-BY-NC-SA-4.0` | Asset |
+| Board textures (blue3, wood4, leather) | — | `AGPL-3.0-or-later` | Asset |
+| [chess](https://github.com/noobpwnftw/python-chess) (`add-chesstb-tablebases` fork) | latest on branch | `GPL-3.0-or-later` | Python |
+| [Flask](https://github.com/pallets/flask) | `>=3.0,<4.0` | `BSD-3-Clause` | Python |
+| [waitress](https://github.com/Pylons/waitress) | `>=3.0,<4.0` | `ZPL-2.1` | Python |
+| [requests](https://github.com/psf/requests) | `>=2.31,<3.0` | `Apache-2.0` | Python |
 
-3. **"Maestro" piece set (`static/pieces/maestro/`)** — **CC BY-NC-SA 4.0**,
-   by sadsnake1, **non-commercial use only**. If this project is used
-   commercially, either remove this piece set or get separate permission
-   from the author.
+## Notices
 
-4. **Frontend: Chessground (`static/vendor/chessground.min.js`,
-   `chessground.base.css`)** — **GPL-3.0-or-later**. The chess board UI is
-   [Chessground](https://github.com/lichess-org/chessground) (10.1.1), the
-   board component developed for lichess.org. Per the maintainers: when
-   Chessground is used in a website, "your combined work may be
-   distributed only under the GPL. You must release your source code to
-   the users of your website." Unlike the backend `python-chess` concern
-   above, which only bites if you hand out copies of the *server* code,
-   this one applies **the moment the app is served to any user who isn't
-   you** — including a locally-hosted deployment accessed by anyone else
-   over a network. Running it purely for yourself, never distributed, is
-   fine under any license. This is a materially stricter condition than a
-   permissively-licensed frontend library would carry, because it reaches
-   the browser and every user of the app, not just the backend. If you
-   plan to distribute this project (give it away, sell it, or deploy it
-   somewhere other users can reach it) with Chessground bundled, the
-   combined client-served frontend needs to be made available under
-   GPL-3.0 terms — review `LICENSE` for compatibility, and treat this as a
-   legal/business decision, not just an engineering one, before shipping.
+The following components carry conditions beyond a standard permissive
+license. Running the app privately, for yourself only, is unaffected by
+any of these — they apply once the app (or a copy of it) reaches
+another user, whether by distribution or network access.
 
-The other components below (chess.js, the fonts, the `cburnett` and
-`kosal` piece sets, and the other Python dependencies) are permissively
-licensed and don't carry these restrictions.
-
----
+- **`chess` / `chess.chesstb`** (`GPL-3.0-or-later`) — `app.py` imports
+  this package directly. Under the FSF's interpretation of the GPL,
+  distributing a program that directly imports a GPL-licensed library
+  generally makes the combined work a derivative that must itself be
+  distributed under GPL-3.0 terms.
+- **Chessground** (`GPL-3.0-or-later`) — bundled in `static/vendor/`
+  and served to every client. Per the [Chessground
+  license](https://github.com/lichess-org/chessground/blob/v10.1.1/LICENSE),
+  a website using it must make the combined client-served work
+  available under the GPL. This condition is triggered by serving the
+  app to any user other than yourself — including a locally hosted
+  instance reachable by others over a network — not only by
+  distributing server source code.
+- **Board textures** (`AGPL-3.0-or-later`) — the AGPL extends copyleft
+  to network use; operating the app as a network service can itself
+  constitute distribution under this license.
+- **Maestro piece set** (`CC-BY-NC-SA-4.0`) — non-commercial use only.
+  Remove this piece set or obtain separate permission before any
+  commercial use of the project.
 
 ## Frontend libraries — `static/vendor/`
 
-| File | Library | Version | License | Author / Source |
+| File | Component | Version | License | Source |
 |---|---|---|---|---|
-| `chessground.min.js`, `chessground.base.css` | Chessground | 10.1.1 | **GPL-3.0-or-later** ([full text](https://github.com/lichess-org/chessground/blob/v10.1.1/LICENSE)) | [lichess.org / Chessground](https://github.com/lichess-org/chessground) — see "Read this first" item 4 above |
-| `chess-1.4.0.esm.js` | chess.js | 1.4.0 | BSD-2-Clause | [Jeff Hlywa](https://github.com/jhlywa/chess.js) |
+| `chessground.min.js`, `chessground.base.css` | Chessground | 10.1.1 | `GPL-3.0-or-later` | [lichess-org/chessground](https://github.com/lichess-org/chessground) |
+| `chess-1.4.0.esm.js` | chess.js | 1.4.0 | `BSD-2-Clause` | [jhlywa/chess.js](https://github.com/jhlywa/chess.js) |
 
 ## Fonts — `static/vendor/fonts/`
 
-| File(s) | Typeface | License | Author / Source |
+| File(s) | Typeface | License | Author |
 |---|---|---|---|
-| `Inter-Regular.woff2`, `Inter-Medium.woff2`, `Inter-SemiBold.woff2` | Inter | SIL Open Font License 1.1 | [Rasmus Andersson](https://rsms.me/inter/) |
-| `JetBrainsMono-Regular.woff2`, `JetBrainsMono-Medium.woff2` | JetBrains Mono | SIL Open Font License 1.1 | [JetBrains](https://www.jetbrains.com/lp/mono/) |
+| `Inter-Regular.woff2`, `Inter-Medium.woff2`, `Inter-SemiBold.woff2` | Inter | `OFL-1.1` | [Rasmus Andersson](https://rsms.me/inter/) |
+| `JetBrainsMono-Regular.woff2`, `JetBrainsMono-Medium.woff2` | JetBrains Mono | `OFL-1.1` | [JetBrains](https://www.jetbrains.com/lp/mono/) |
 
 ## Chess piece sets — `static/pieces/` (via lichess.org)
 
 | Directory | License | Author | Source |
 |---|---|---|---|
-| `cburnett/` | GPL-2.0-or-later | Colin M.L. Burnett | [lila COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md) |
-| `kosal/` | CC BY 4.0 | Philatype | [philatype/kosal](https://github.com/philatype/kosal), via lila |
-| `maestro/` | **CC BY-NC-SA 4.0 — non-commercial only** | sadsnake1 | [lila COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md) |
+| `cburnett/` | `GPL-2.0-or-later` | Colin M.L. Burnett | [lila COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md) |
+| `kosal/` | `CC-BY-4.0` | Philatype | [philatype/kosal](https://github.com/philatype/kosal), via lila |
+| `maestro/` | `CC-BY-NC-SA-4.0` (non-commercial only) | sadsnake1 | [lila COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md) |
 
 ## Board textures — `static/boards/` (via lichess.org)
 
 | File | License | Author | Source |
 |---|---|---|---|
-| `blue3.jpg`, `wood4.jpg`, `leather.jpg` | AGPL-3.0-or-later | the lila authors and pirouetti | [lila COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md) |
+| `blue3.jpg`, `wood4.jpg`, `leather.jpg` | `AGPL-3.0-or-later` | the lila authors and pirouetti | [lila COPYING.md](https://github.com/lichess-org/lila/blob/master/COPYING.md) |
 
-## Backend (Python) dependencies — `requirements.txt`
+## Python dependencies — `requirements.txt`
 
 | Package | License | Notes |
 |---|---|---|
-| `chess` (installed from `noobpwnftw/python-chess`, `add-chesstb-tablebases` branch) | GPL-3.0-or-later | Fork of [niklasf/python-chess](https://github.com/niklasf/python-chess); both the base `chess` package and `chess.chesstb` are imported directly by `app.py`. See callout above. |
-| Flask | BSD-3-Clause | [pallets/flask](https://github.com/pallets/flask) |
-| waitress | ZPL 2.1 (permissive) | [Pylons/waitress](https://github.com/Pylons/waitress) |
-| lz4 | BSD-3-Clause | [python-lz4/python-lz4](https://github.com/python-lz4/python-lz4) |
-| requests | Apache-2.0 | [psf/requests](https://github.com/psf/requests); used by `remote/remote_source.py` (and, through it, `remote/remote_fallback.py`) only when `TABLEBASE_PATH` is a remote `http(s)://` URL. |
+| `chess` (installed from `noobpwnftw/python-chess`, `add-chesstb-tablebases` branch) | `GPL-3.0-or-later` | Fork of [niklasf/python-chess](https://github.com/niklasf/python-chess). Both the base `chess` package and `chess.chesstb` are imported directly by `app.py`. |
+| Flask | `BSD-3-Clause` | [pallets/flask](https://github.com/pallets/flask) |
+| waitress | `ZPL-2.1` | [Pylons/waitress](https://github.com/Pylons/waitress) |
+| requests | `Apache-2.0` | [psf/requests](https://github.com/psf/requests). Imported only when `TABLEBASE_PATH` is a remote `http(s)://` URL (`remote/remote_source.py`, `remote/remote_fallback.py`). |
 
-## Not third-party
+## License texts
 
-The favicon in `templates/index.html` is an inline, self-authored SVG data
-URI — no external asset. Everything under `README.md` and the
-application code itself (`app.py`, `config.py`, `static/js/*.js`,
-`static/css/main.css`, `templates/*.html`, `remote/`) is original,
-written by Claude (Anthropic) for this project and covered by `LICENSE`.
+| SPDX identifier | Text |
+|---|---|
+| `GPL-3.0-or-later` | <https://www.gnu.org/licenses/gpl-3.0.txt> |
+| `AGPL-3.0-or-later` | <https://www.gnu.org/licenses/agpl-3.0.txt> |
+| `GPL-2.0-or-later` | <https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt> |
+| `BSD-2-Clause` | <https://spdx.org/licenses/BSD-2-Clause.html> |
+| `BSD-3-Clause` | <https://spdx.org/licenses/BSD-3-Clause.html> |
+| `OFL-1.1` | <https://scripts.sil.org/OFL> |
+| `CC-BY-4.0` | <https://creativecommons.org/licenses/by/4.0/legalcode> |
+| `CC-BY-NC-SA-4.0` | <https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode> |
+| `ZPL-2.1` | <https://opensource.org/license/zpl-2-1/> |
+| `Apache-2.0` | <https://www.apache.org/licenses/LICENSE-2.0.txt> |
 
 ## Tablebase data
 
-Not covered here: this project only *displays* results from ChessTB
-tablebase files you supply yourself (see README.md → "Getting the
-tablebase files"). No tablebase data is bundled with the app, so its
-licensing is outside the scope of this document.
+Not covered by this document. This project only displays results from
+ChessTB tablebase files supplied by the user (see `README.md` →
+"Getting the tablebase files"). No tablebase data is bundled with the
+app.

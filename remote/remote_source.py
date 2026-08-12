@@ -3,21 +3,17 @@ via ``Range`` requests, instead of a local filesystem.
 
 This module has no chesstb-specific logic of its own -- it's a generic
 HTTP byte-range client -- and lives in remote/ as shared infrastructure
-for remote (URL) ``TABLEBASE_PATH`` support. app.py's ``chess.chesstb``
-backend (noobpwnftw's python-chess fork, see requirements.txt) only ever
-reads a local filesystem path, so remote/remote_fallback.py builds on top
-of this module's :class:`RemoteHTTPClient`, :class:`RemoteFile`, and
-:class:`_PageCache` to download each table in full on first touch and
-cache it locally (see that file's module docstring for the full design).
+for remote (URL) ``TABLEBASE_PATH`` support, used by both remote backends
+app.py can select via ``config.REMOTE_MODE`` (see each file's module
+docstring for its own design):
 
-:class:`RemoteFileView` below is a lazy, slice-addressable view over a
-:class:`RemoteFile` that fetches only the byte ranges actually read --
-suitable for a ``chess.chesstb`` backend that can probe directly against
-an mmap'd-buffer-shaped source without downloading a whole table first.
-The currently-shipped backend doesn't do that (it downloads whole files
-via remote_fallback.py instead, per above), so this class isn't on that
-codepath today, but is kept here as ready-to-use infrastructure for a
-backend that can take advantage of it.
+* remote/remote_direct.py ("direct", the default) probes tables in place,
+  reading through :class:`RemoteFileView` below so only the byte ranges a
+  probe actually touches are ever fetched.
+* remote/remote_fallback.py ("download") downloads each table file in
+  full on first touch and disk-caches it, using only
+  :class:`RemoteHTTPClient`, :class:`RemoteFile`, and :class:`_PageCache`
+  from this module.
 
 Design
 ------
@@ -41,7 +37,7 @@ Design
   never touches the network, just narrows the (base, length) window.
   Only an explicit materialisation (``bytes(view)``, iterating it, or
   indexing a single byte) triggers a fetch, and only for the span
-  actually needed.
+  actually needed. This is what remote_direct.py probes through.
 """
 from __future__ import annotations
 

@@ -39,14 +39,6 @@ waitress>=3.0,<4.0
 #   pip install -e ../python-chess
 chess @ git+https://github.com/noobpwnftw/python-chess.git@add-chesstb-tablebases
 
-# --- Fast LZ4 decompression for WDL tables -------------------------------
-# ChessTB WDL tables are LZ4-compressed; chess.chesstb decompresses them
-# via this C-accelerated package, which is faster than a pure-Python
-# decoder and, since the C implementation releases the GIL during
-# decompression, lets PROBE_THREADS worker threads decode different WDL
-# blocks in true parallel.
-lz4>=4.0,<5.0
-
 # --- HTTP client for a remote (URL) TABLEBASE_PATH ------------------------
 # Used by remote/remote_source.py and remote/remote_fallback.py (see
 # README.md → "Getting the tablebase files") to support pointing
