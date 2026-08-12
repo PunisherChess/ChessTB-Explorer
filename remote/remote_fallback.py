@@ -28,9 +28,9 @@ that material, rather than only the specific byte ranges (header/index
 plus whichever compressed blocks the position's index falls into) a probe
 actually needs -- there's no way to get bytes in front of code that only
 ever calls ``open()`` on a path other than putting real bytes at that
-path first (see ``remote_source.py``'s module docstring for a byte-range
-alternative, kept there as infrastructure for a backend that could use
-it). Once cached, later probes against that material are served straight
+path first (see ``remote_direct.py`` for the byte-range alternative,
+which reads through this module's ``RemoteFileView`` instead). Once
+cached, later probes against that material are served straight
 from local disk with no further network round trip. Concretely this
 means: slower first touch of a given material (a full download instead
 of a few small ranged fetches), fast disk-speed reads for everything
@@ -54,7 +54,6 @@ import collections
 import importlib.util
 import os
 import shutil
-import sys
 import tempfile
 import threading
 from typing import Optional

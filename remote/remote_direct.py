@@ -4,28 +4,25 @@ fetching only the bytes each probe touches.
 How this differs from remote_fallback.py
 ----------------------------------------
 remote_fallback.py downloads a whole table file on first touch and hands
-the standard ``WDLFile``/``DTCFile``/``DTM50File`` a local path, because
-at the time it was written those classes could only ``open()`` a
-filesystem path. They can now read through any buffer-shaped object:
-``chess.chesstb._TableFile._open_source`` is the documented seam for it,
-and ``chess.chesstb.Tablebase.WDL_FILE`` / ``.DTC_FILE`` / ``.DTM50_FILE``
-name the classes carrying the override, so a transport no longer has to
-reimplement the look-once-then-cache logic in ``_open_wdl`` and friends.
+the standard ``WDLFile``/``DTCFile``/``DTM50File`` a local path. This
+module instead uses those same classes' ability to read through any
+buffer-shaped object: ``chess.chesstb._TableFile._open_source`` is the
+documented seam for it, and ``chess.chesstb.Tablebase.WDL_FILE`` /
+``.DTC_FILE`` / ``.DTM50_FILE`` name the classes carrying the override,
+so this module never has to reimplement the look-once-then-cache logic
+in ``_open_wdl`` and friends.
 
-This module connects that seam to :class:`remote_source.RemoteFileView`,
-which was written against exactly this contract and had no caller. The
-result is what remote_source.py's docstring already described as the goal:
-``_find`` resolves a material to a :class:`remote_source.RemoteFile` rather
-than downloading it, ``_open_source`` wraps that in a lazy view, and the
-table's header parse plus each probe's block reads pull only their own
-byte ranges through the shared page cache.
+This module connects that seam to :class:`remote_source.RemoteFileView`:
+``_find`` resolves a material to a :class:`remote_source.RemoteFile`
+rather than downloading it, ``_open_source`` wraps that in a lazy view,
+and the table's header parse plus each probe's block reads pull only
+their own byte ranges through the shared page cache.
 
 Trade-off against remote_fallback.py
 ------------------------------------
-Cold cost drops from "one full table download" to "a handful of 256 KiB
-pages", and ``REMOTE_PAGE_CACHE_BYTES`` goes back to bounding memory
-rather than doubling as an on-disk budget -- nothing is written to disk
-here at all.
+Cold cost is "a handful of 256 KiB pages" rather than "one full table
+download", and ``REMOTE_PAGE_CACHE_BYTES`` bounds memory only -- nothing
+is written to disk here at all.
 
 The cost is per-read CPU. Against a mapping, the hot 8-byte bit-window
 read (:func:`chess.chesstb._read_u64le`) is a C-level ``unpack_from``;
