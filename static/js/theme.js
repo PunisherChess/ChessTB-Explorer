@@ -90,8 +90,8 @@ const IMAGE_BOARDS = [
         label:       'Blue Marble',
         mode:        'image',
         boardImage:  '/static/boards/blue3.jpg',
-        labelColour: 'rgba(210, 235, 255, 0.92)',
-        labelShadow: '0 0 4px rgba(0, 0, 0, 0.95)',
+        labelLight:  '#4470a2',
+        labelDark:   '#e6e3de',
         highlight:   'rgba(155, 199, 0, 0.41)',
         trayBg:      '#6a8aaa',
         trayBgDark:  '#3a5a7a',
@@ -102,8 +102,8 @@ const IMAGE_BOARDS = [
         label:       'Leather',
         mode:        'image',
         boardImage:  '/static/boards/leather.jpg',
-        labelColour: 'rgba(223, 223, 218, 0.92)',
-        labelShadow: '0 0 3px rgba(0, 0, 0, 0.85)',
+        labelLight:  '#b58509',
+        labelDark:   '#e7e3dd',
         highlight:   'rgba(155, 199, 0, 0.41)',
         trayBg:      '#c4aa6b',
         trayBgDark:  '#886e2f',
@@ -114,8 +114,8 @@ const IMAGE_BOARDS = [
         label:       'Wood',
         mode:        'image',
         boardImage:  '/static/boards/wood4.jpg',
-        labelColour: 'rgba(240, 210, 155, 0.92)',
-        labelShadow: '0 0 3px rgba(0, 0, 0, 0.85)',
+        labelLight:  '#85532d',
+        labelDark:   '#cfb68f',
         highlight:   'rgba(155, 199, 0, 0.41)',
         trayBg:      '#b4a888',
         trayBgDark:  '#7a6a50',
@@ -165,8 +165,11 @@ let _reconstructBoard = null;              // callback registered via init()
 // default outside-the-board placement, not an overlaid one). See the
 // matching comment in main.css for the full derivation.
 //
-// For image boards a single label colour + optional text-shadow is used,
-// since the photo supplies its own contrast context.
+// Both board kinds use the same two-colour, alternating-by-square scheme
+// for the labels themselves — _coordLabelCss() below: 
+// a light square's label is coloured with something drawn
+// from the board's dark tone, a dark square's label with something drawn
+// from its light tone, so the label always reads against its own square.
 
 function _checkerboardDataUri(light, dark) {
     const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='2' height='2'>
@@ -176,6 +179,29 @@ function _checkerboardDataUri(light, dark) {
 <rect x='1' y='1' width='1' height='1' fill='${light}'/>
 </svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
+// Coordinate-label CSS shared by both board kinds: a light-square label
+// gets c.labelLight, a dark-square label gets c.labelDark. Same nth-child+
+// orientation structure as main.css's own default coord-label rule (see
+// the comment there for why .coord-light/.coord-dark aren't used) — class
+// + type + type + :nth-child, matched on all four orientation/parity
+// combinations, so this carries the same CSS specificity and correctly
+// overrides that default rather than losing to it regardless of source
+// order. For white orientation the odd nth-child positions land on the
+// a-file's dark squares (a1/a3/a5/a7, per main.css's comment) and so take
+// c.labelDark; the even positions (a2/a4/a6/a8, light squares) take
+// c.labelLight. No text-shadow: the label colour itself carries enough
+// contrast against its own square.
+function _coordLabelCss(c) {
+    return `.orientation-white coords.ranks coord:nth-child(odd),
+.orientation-white coords.files coord:nth-child(odd) { color: ${c.labelDark} !important; }
+.orientation-white coords.ranks coord:nth-child(even),
+.orientation-white coords.files coord:nth-child(even) { color: ${c.labelLight} !important; }
+.orientation-black coords.ranks coord:nth-child(odd),
+.orientation-black coords.files coord:nth-child(odd) { color: ${c.labelLight} !important; }
+.orientation-black coords.ranks coord:nth-child(even),
+.orientation-black coords.files coord:nth-child(even) { color: ${c.labelDark} !important; }`;
 }
 
 function _cssForColourBoard(c) {
@@ -189,30 +215,11 @@ cg-board {
        the base checkerboard sizing in main.css. */
     background-size: 25% 25%;
 }
-/* Same nth-child+orientation structure as main.css's default coord-label
-   rule (see the comment there for why .coord-light/.coord-dark aren't
-   used). c.labelLight is "the colour to use for a label ON a light
-   square" (i.e. a dark, contrasting colour) and c.labelDark is the
-   converse (a light colour, for labels on dark squares) — so for white
-   orientation, the odd nth-child positions (which — per main.css's
-   comment — land on the a-file's dark squares, a1/a3/a5/a7) need
-   c.labelDark's colour, and the even positions (a2/a4/a6/a8, light
-   squares) need c.labelLight's. */
-.orientation-white coords.ranks coord:nth-child(odd),
-.orientation-white coords.files coord:nth-child(odd) { color: ${c.labelDark} !important; }
-.orientation-white coords.ranks coord:nth-child(even),
-.orientation-white coords.files coord:nth-child(even) { color: ${c.labelLight} !important; }
-.orientation-black coords.ranks coord:nth-child(odd),
-.orientation-black coords.files coord:nth-child(odd) { color: ${c.labelLight} !important; }
-.orientation-black coords.ranks coord:nth-child(even),
-.orientation-black coords.files coord:nth-child(even) { color: ${c.labelDark} !important; }
+${_coordLabelCss(c)}
 cg-board square.last-move { background-color: ${c.highlight} !important; }`;
 }
 
 function _cssForImageBoard(c) {
-    const shadowRule = c.labelShadow
-        ? `    text-shadow: ${c.labelShadow} !important;\n`
-        : '';
     return `/* chesstb-theme: ${c.id} */
 :root { --tray-bg: ${c.trayBg}; --tray-bg-dark: ${c.trayBgDark}; --tray-border: ${c.trayBorder}; }
 cg-board {
@@ -220,9 +227,7 @@ cg-board {
     background-size: 100% 100% !important;
     background-repeat: no-repeat !important;
 }
-coords.ranks coord, coords.files coord {
-    color: ${c.labelColour} !important;
-${shadowRule}}
+${_coordLabelCss(c)}
 cg-board square.last-move { background-color: ${c.highlight} !important; }`;
 }
 
