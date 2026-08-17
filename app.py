@@ -349,7 +349,9 @@ def set_security_headers(response: Response) -> Response:
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
-        "font-src 'self'; img-src 'self' data:; connect-src 'self';"
+        "font-src 'self'; img-src 'self' data:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; "
+        "frame-ancestors 'none';"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"

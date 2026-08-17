@@ -947,9 +947,7 @@ cg-board square.check {
 /* Drag ghost and arrow overlay: no CSS needed here — both are native
    chessground features (draggable.showGhost / drawable.autoShapes),
    styled via chessground.base.css + the drawable.brushes config in
-   board.js. The old .arrow-overlay / .drag-ghost / @keyframes
-   ghost-pulse rules have no chessground equivalent to replace them with
-   because there's nothing hand-rolled left to style. */
+   board.js. */
 
 /* ── Right column ───────────────────────────────────────────────────── */
 .right-col {
