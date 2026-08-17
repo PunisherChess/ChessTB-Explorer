@@ -68,7 +68,11 @@ this project to anyone else.
   survives a trip to the admin dashboard and back.
 - **Board and piece-set theming** — two colour boards, three photographic
   boards, and three piece sets, picked from a settings panel and
-  persisted locally.
+  persisted locally. Every board's rank/file labels alternate between two
+  colours by square — a light square's label is coloured from the
+  board's dark tone and vice versa, the same scheme lichess's own board
+  themes use — rather than one compromise colour that has to stay legible
+  against both.
 - **Streaming probes** — `/probe/stream` reports progress via
   Server-Sent Events while child positions are being probed, so the UI
   shows a live progress bar instead of a blank pause on slower lookups.
@@ -472,7 +476,15 @@ curl -X POST http://127.0.0.1:5000/probe \
   inline `style="..."` attributes in `index.html`/`admin.html`, e.g. the
   moves-table `<colgroup>` widths); images allow `'self'` plus `data:`;
   `connect-src`/`default-src` are `'self'` too, so `fetch`/SSE calls can
-  only reach this same origin. `X-Content-Type-Options: nosniff`,
+  only reach this same origin. `object-src`, `base-uri`, and
+  `form-action` are locked to `'none'`/`'self'`/`'self'` respectively —
+  the app has no `<object>`/`<embed>`, no `<base>` tag, and no `<form>`,
+  so there's nothing lost in restricting them, and `base-uri` in
+  particular doesn't fall back to `default-src` the way most other
+  directives do, so it has to be set explicitly to mean anything.
+  `frame-ancestors 'none'` is the CSP-native counterpart to the
+  `X-Frame-Options: DENY` set alongside it below.
+  `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, and
   `Referrer-Policy: strict-origin-when-cross-origin` are set alongside it.
   Request bodies are capped at 4 KB.

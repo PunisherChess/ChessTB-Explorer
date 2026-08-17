@@ -346,10 +346,25 @@ def _shutdown_executor() -> None:
 
 @app.after_request
 def set_security_headers(response: Response) -> Response:
+    # Every fetch directive below is explicit rather than left to the
+    # default-src fallback for two directives that don't get one:
+    # base-uri and form-action are document/navigation directives, not
+    # fetch directives, so default-src never covers them — leaving
+    # base-uri unset allows an injected <base> element to rewrite every
+    # relative URL on the page (script src, image src, links, ...) to an
+    # attacker's origin regardless of how tight the rest of the policy
+    # is. object-src is a fetch directive and does already inherit
+    # default-src 'self', but is set to 'none' explicitly here anyway
+    # since the app has no legitimate use for <object>/<embed>/<applet>
+    # and there's no reason to leave that surface open even to same-
+    # origin content. frame-ancestors 'none' is the CSP-native form of
+    # the X-Frame-Options: DENY below, for the browsers that check it.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
-        "font-src 'self'; img-src 'self' data:; connect-src 'self';"
+        "font-src 'self'; img-src 'self' data:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; "
+        "frame-ancestors 'none';"
     )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
