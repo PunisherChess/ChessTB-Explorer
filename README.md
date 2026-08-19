@@ -34,6 +34,13 @@ this project to anyone else.
 - **Interactive board** — drag-and-drop moves, click-to-place pieces from
   the spare-piece trays, pawn promotion dialog, board flip (orientation
   persisted locally across visits), undo/redo.
+- **Lock** — a padlock button beside the FEN box that restricts board
+  interaction to legal moves only: dragging, click-to-move, and the
+  spare-piece trays are limited to the side to move's legal destinations,
+  and off-board drops are disabled. Unlocked by default; a manual toggle
+  is remembered locally across visits. Auto-play also engages Lock for
+  the duration of a run (unless already locked by hand), and disables the
+  padlock button until the run stops.
 - **Three ranked move tables side by side** — DTC, DTM, and DTM50 columns,
   each independently sorted best-move-first, with:
   - score text colour-coded by outcome (win / cursed win / draw /
@@ -54,7 +61,9 @@ this project to anyone else.
   is set from the settings panel (**Autoplay Delay**, 0s–2.5s in 50ms
   steps, 1.25s by default) and acts as a floor — a move that's still
   waiting on its tablebase probe takes as long as the probe does,
-  regardless of the delay setting.
+  regardless of the delay setting. A metric's button is disabled when its
+  table isn't present for the current material, or when the position is
+  already a draw.
 - **PGN import/export** — paste a PGN to load a game and click through its
   moves, or copy the current line as PGN.
 - **CSV export** of the current move table, including the Root Row line
@@ -203,17 +212,20 @@ ChessTB tablebase files are available two ways:
 
 ### Option A — Remote, downloaded on demand (recommended)
 
-The full ChessTB set is published as a Hugging Face storage bucket at:
+The full ChessTB set is published as a Hugging Face storage bucket,
+browsable at:
 
 ```
-https://huggingface.co/buckets/noobpwnftw/chesstb/resolve
+https://huggingface.co/buckets/noobpwnftw/chesstb
 ```
 
 with `wdl/`, `dtc/`, and `dtm50/` subdirectories laid out exactly like the
-local directory structure below. The trailing `/resolve` is required —
-the bucket's raw file bytes are served from that path, not from the
-bare `.../chesstb` URL, so a `TABLEBASE_PATH` missing it will fail every
-probe. Point `TABLEBASE_PATH` straight at that URL:
+local directory structure below. Buckets aren't versioned the way
+regular Hub repos are, so there's no branch segment — the raw file bytes
+for that same folder are served from `/resolve`
+mirroring how a normal repo's `/blob/<path>` pairs with its
+`/resolve/<path>`. Point `TABLEBASE_PATH` straight at the `/resolve`
+URL:
 
 ```python
 TABLEBASE_PATH = "https://huggingface.co/buckets/noobpwnftw/chesstb/resolve"
@@ -369,6 +381,12 @@ python app.py
   off the board to remove it, or click a spare piece in either tray and
   then click a square to place it (click again / press `Esc` to cancel).
   Board edits reset the current move line the same way **Clear** does.
+- **Lock the board** — click the padlock button beside the FEN box to
+  restrict drag-and-drop, click-to-move, and the spare-piece trays to
+  legal moves for the side to move; the button turns gold while active.
+  Click again to unlock. The choice is remembered locally across visits.
+  Starting auto-play locks the board automatically for the run (unless
+  already locked) and disables the padlock button until it stops.
 - **Play moves** — click any move in one of the three ranked tables to
   play it, or drag a piece on the board through a legal move.
 - **Navigate history** — **Back**/**Forward** buttons or `←`/`→`, or click
@@ -468,14 +486,15 @@ curl -X POST http://127.0.0.1:5000/probe \
   local development, never for anything reachable from another machine.
 - A `Content-Security-Policy` is set on every response: scripts and fonts
   are restricted to `'self'` (no inline scripts, no third-party sources);
-  styles allow `'self'` plus `'unsafe-inline'` (needed for the handful of
-  inline `style="..."` attributes in `index.html`/`admin.html`, e.g. the
-  moves-table `<colgroup>` widths); images allow `'self'` plus `data:`;
-  `connect-src`/`default-src` are `'self'` too, so `fetch`/SSE calls can
-  only reach this same origin. `X-Content-Type-Options: nosniff`,
-  `X-Frame-Options: DENY`, and
-  `Referrer-Policy: strict-origin-when-cross-origin` are set alongside it.
-  Request bodies are capped at 4 KB.
+  styles allow `'self'` plus `'unsafe-inline'` (needed for a handful of
+  inline `style="..."` attributes in `index.html`/`admin.html`); images
+  allow `'self'` plus `data:`; `connect-src`/`default-src` are `'self'`
+  too, so `fetch`/SSE calls can only reach this same origin. `object-src`,
+  `base-uri`, and `form-action` are locked to `'none'`/`'self'`/`'self'`,
+  and `frame-ancestors 'none'` is the CSP-native counterpart to the
+  `X-Frame-Options: DENY` set alongside it. `X-Content-Type-Options:
+  nosniff` and `Referrer-Policy: strict-origin-when-cross-origin` are set
+  too. Request bodies are capped at 4 KB.
 - `config.py` holds no secrets — there's no API key, password, or
   credential anywhere in this app — so it's safe to commit as-is and
   edit in place.
@@ -493,7 +512,9 @@ curl -X POST http://127.0.0.1:5000/probe \
 | `ModuleNotFoundError: No module named 'config'` | `config.py` is missing from alongside `app.py`. It ships with the repository — if it was deleted or moved, restore it from the repo (or re-clone) and re-apply any edits, such as `TABLEBASE_PATH`. |
 | App logs `Configuration error: ...` and exits immediately | A value in `config.py` is the wrong type or out of range for that setting (e.g. a string where an integer is expected, or a negative cache size) — the error message names which setting and why. Fix it in `config.py` and re-run `python app.py`. |
 | Admin dashboard panels stuck on "Loading…" | Check the browser console for a CSP violation, or that the app itself is actually running and reachable at the URL you're loading `/admin` from. |
-| Probing feels slow on positions with many legal moves, or doesn't scale with `PROBE_THREADS` | Tune `PROBE_THREADS`, `PROBE_PARALLEL_THRESHOLD`, and `PROBE_TIMEOUT_SECS` in `config.py`. Note that `chess.chesstb` has no locking around opening a not-yet-seen tablebase, so several threads racing to open the same never-before-seen material can each do a redundant read — this only affects the very first probe against any given material. |
+| A drag, drop, or spare-piece placement on the board is silently rejected | The board is Locked — the padlock button beside the FEN box is highlighted gold. Lock restricts board interaction to legal moves and disables the spare-piece trays and off-board drops; click the padlock again to unlock and edit freely. |
+| Probing feels slow on positions with many legal moves, or doesn't scale with `PROBE_THREADS` | Check the startup log for `chess.chesstb: 'lz4' package not installed` — without it, decompression runs in pure Python and holds the GIL, so `PROBE_THREADS` can't achieve real parallelism. `pip install lz4` (already in `requirements.txt`) and restart. Otherwise, tune `PROBE_THREADS`, `PROBE_PARALLEL_THRESHOLD`, and `PROBE_TIMEOUT_SECS` in `config.py`. Note that `chess.chesstb` has no locking around opening a not-yet-seen tablebase, so several threads racing to open the same never-before-seen material can each do a redundant read — this only affects the very first probe against any given material. |
+| App logs `chess.chesstb: 'lz4' package not installed` at startup | Cosmetic warning, not an error — the app falls back to the pure-Python decoder and keeps working, just slower. `pip install lz4` and restart to pick it up. |
 | `ModuleNotFoundError: No module named 'waitress'` | Your environment predates the waitress dependency — re-run `pip install -r requirements.txt` to pick it up. `app.py` imports waitress unconditionally at the top of the file, before `config.DEBUG` is even read, so setting `DEBUG = True` does **not** avoid this — waitress has to be installed either way. |
 | Every probe on a remote `TABLEBASE_PATH` returns "Position not covered..." or `/health` is `degraded` | Confirm the URL is reachable and correct (try opening `TABLEBASE_PATH/wdl/KQK.lzw` — or any small material's `.lzw` — directly in a browser). Check the startup log's "Tablebase opened remotely at: ..." line (or a warning in its place) for the actual failure. |
 | A probe occasionally returns `503` with `error_code: "probe_timeout"` | Another concurrent request was already probing the same position and didn't finish within `PROBE_TIMEOUT_SECS`. This is transient and retryable — the original probe has usually landed in the child-probe cache by the time you retry, so the retry is cheap. Frequent occurrences suggest raising `PROBE_TIMEOUT_SECS`, or that a slow remote `TABLEBASE_PATH` is the underlying bottleneck. |

@@ -90,6 +90,24 @@
           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
           aria-label="FEN position string"
         >
+        <!-- Locked/unlocked padlock icons share the same body and shackle
+             anchor; unlocked leaves the shackle's arc open on one side. -->
+        <button id="lock-btn" class="btn btn--icon-only btn--lock" type="button"
+                aria-pressed="false" aria-label="Lock board to legal moves only"
+                title="Lock board (legal moves only)">
+          <svg class="btn__icon lock-icon lock-icon--unlocked" width="14" height="14" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="10" rx="2"/>
+            <path d="M8 11V7a4 4 0 0 1 8 0"/>
+          </svg>
+          <svg class="btn__icon lock-icon lock-icon--locked" width="14" height="14" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="10" rx="2"/>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+          </svg>
+        </button>
       </div>
 
       <!-- Action buttons -->
@@ -184,12 +202,12 @@
     <div class="board-wrap" aria-label="Chess board">
       <div id="board-wrap-inner" class="board-wrap-inner">
         <div class="spare-tray spare-tray--black" data-color="b">
-          <button class="spare-piece" data-piece="bK" type="button"><img src="" draggable="false" alt=""></button>
-          <button class="spare-piece" data-piece="bQ" type="button"><img src="" draggable="false" alt=""></button>
-          <button class="spare-piece" data-piece="bR" type="button"><img src="" draggable="false" alt=""></button>
-          <button class="spare-piece" data-piece="bB" type="button"><img src="" draggable="false" alt=""></button>
-          <button class="spare-piece" data-piece="bN" type="button"><img src="" draggable="false" alt=""></button>
           <button class="spare-piece" data-piece="bP" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bN" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bB" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bR" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bQ" type="button"><img src="" draggable="false" alt=""></button>
+          <button class="spare-piece" data-piece="bK" type="button"><img src="" draggable="false" alt=""></button>
         </div>
         <div id="board"></div>
         <div class="spare-tray spare-tray--white" data-color="w">

@@ -8,7 +8,9 @@
  *     buttons.
  *   - URL-hash position sharing: writes the FEN to location.hash on every
  *     position change and reads it back on load / hashchange.
- *   - Auto-play: plays a metric's best move automatically on a timer.
+ *   - Auto-play: plays a metric's best move automatically on a timer, and
+ *     engages Board's Lock for the run's duration so on-board input can't
+ *     land against a position auto-play has since moved past.
  *   - PGN import: a modal that parses a PGN and lets the user click any
  *     move to jump to it.
  *   - Clicking a move in the PGN panel — main line or a variation — jumps
@@ -491,6 +493,35 @@ const UI = (() => {
     let _autoPlayCycleId     = 0;
     let _autoPlayPacingReady = false;   // this wait's pacing window has elapsed
     let _autoPlayDataReady   = false;   // this wait's position data is available
+    // True while an auto-play run has engaged Lock itself, so _stopAutoPlay()
+    // knows whether to release it or leave a user-set lock alone.
+    let _autoPlayLockEngaged = false;
+
+    // Single point where Lock is toggled — direct #lock-btn click, auto-play
+    // engaging/releasing it, or restoring from localStorage on load — so
+    // Board's lock state and the button's visual state stay in sync.
+    function _setLocked(next, persist = true) {
+        Board.setLocked(next, persist);
+        const btn = document.getElementById('lock-btn');
+        if (!btn) return;
+        btn.classList.toggle('is-locked', next);
+        btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        btn.title = next ? 'Unlock board' : 'Lock board (legal moves only)';
+    }
+
+    // Disables changing Lock for the duration of an auto-play run, without
+    // using the native `disabled` attribute — that would block hover/title
+    // too. aria-disabled communicates the state to assistive tech instead,
+    // and the click handler below is the actual gate.
+    function _setLockBtnAutoPlayDisabled(disabled) {
+        const btn = document.getElementById('lock-btn');
+        if (!btn) return;
+        btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+        btn.classList.toggle('is-autoplay-disabled', disabled);
+        btn.title = disabled
+            ? 'Stop auto-play to change Lock'
+            : (Board.isLocked() ? 'Unlock board' : 'Lock board (legal moves only)');
+    }
 
     function _autoplayBtn(metric) { return document.getElementById(`autoplay-btn-${metric}`); }
 
@@ -502,6 +533,11 @@ const UI = (() => {
         _autoPlayTimer = null;
         _autoPlayPacingReady = false;
         _autoPlayDataReady   = false;
+        if (_autoPlayLockEngaged) {
+            _autoPlayLockEngaged = false;
+            _setLocked(false, false);
+        }
+        _setLockBtnAutoPlayDisabled(false);
         if (!prevMetric) return;
         const btn = _autoplayBtn(prevMetric);
         if (btn) {
@@ -517,6 +553,14 @@ const UI = (() => {
         if (!_METRIC_CONFIG[metric]) return;
         _stopAutoPlay();   // only one metric autoplays at a time
         _autoPlayMetric = metric;
+        // Engages Lock for the run's duration, so an incidental drag or
+        // click can't land against a position auto-play has since moved
+        // past. Skipped if the board is already locked by hand.
+        if (!Board.isLocked()) {
+            _autoPlayLockEngaged = true;
+            _setLocked(true, false);
+        }
+        _setLockBtnAutoPlayDisabled(true);
         const btn = _autoplayBtn(metric);
         if (btn) {
             btn.classList.add('is-playing');
@@ -567,8 +611,13 @@ const UI = (() => {
         const data = Tablebase.getLastData();
         if (!data) return;
         const moves = data[_METRIC_CONFIG[metric].dataKey] || [];
-        // Find the first non-unknown move
-        const best = moves.find(m => m.outcome !== 'unknown');
+        // Find the first usable move: not 'unknown' (unprobed child), and
+        // not a WDL-only/'not_available' stand-in from a table this
+        // material doesn't have (see backend's evaluate_all_moves) — the
+        // auto-play button is disabled whenever that's true for the whole
+        // metric (see _updateAutoplayAvailability), but this guards the
+        // same case defensively at the point a move actually gets played.
+        const best = moves.find(m => m.outcome !== 'unknown' && m.available !== false);
         // Stop autoplay if there's no usable move
         if (!best) { _stopAutoPlay(); return; }
         // Mark this specific position change as auto-play-initiated so
@@ -593,11 +642,19 @@ const UI = (() => {
         _tryPlayAutoPlayMove(_autoPlayCycleId);
     }
 
-    // Disable a metric's auto-play button when its root outcome is already a
-    // draw — there's no "best move" worth auto-playing towards. DTC/DTM
-    // share the root WDL (they ignore the 50-move rule); DTM50 uses its own
-    // 50-move-rule-aware root WDL.
+    // Disable a metric's auto-play button when either this material has no
+    // table for that metric, or its root outcome is already a draw — no
+    // "best move" is worth auto-playing towards either way. DTC/DTM share
+    // the root WDL for the draw check (they ignore the 50-move rule); DTM50
+    // uses its own 50-move-rule-aware root WDL and its own dtm50_available
+    // flag — neither ever derives from DTC/DTM's metrics or from the main
+    // WDL, since DTM50 doesn't use either.
     function _updateAutoplayAvailability(data) {
+        const availableByMetric = {
+            dtc:   data?.dtz_available,
+            dtm:   data?.dtm_available,
+            dtm50: data?.dtm50_available,
+        };
         const rootWdlByMetric = {
             dtc:   data?.wdl,
             dtm:   data?.wdl,
@@ -606,11 +663,14 @@ const UI = (() => {
         _AUTO_PLAY_METRICS.forEach(metric => {
             const btn = _autoplayBtn(metric);
             if (!btn) return;
-            const isDraw = rootWdlByMetric[metric] === 0;
-            if (isDraw) {
+            const unavailable = availableByMetric[metric] === false;
+            const isDraw = !unavailable && rootWdlByMetric[metric] === 0;
+            if (unavailable || isDraw) {
                 if (_autoPlayMetric === metric) _stopAutoPlay();
                 btn.disabled = true;
-                btn.title = `${_METRIC_CONFIG[metric].label} auto-play unavailable — position is a draw`;
+                btn.title = unavailable
+                    ? `Auto-play unavailable — no ${_METRIC_CONFIG[metric].label} table for this material`
+                    : `${_METRIC_CONFIG[metric].label} auto-play unavailable — position is a draw`;
             } else {
                 btn.disabled = false;
                 if (_autoPlayMetric !== metric) btn.title = `Auto-play best ${_METRIC_CONFIG[metric].label} move`;
@@ -1066,6 +1126,15 @@ const UI = (() => {
         });
         document.getElementById('back-btn')?.addEventListener('click', () => Board.goBack());
         document.getElementById('forward-btn')?.addEventListener('click', () => Board.goForward());
+
+        // Lock — restricts on-board interaction to legal moves only. Syncs
+        // the button's visual state with whatever Board.init() restored.
+        _setLocked(Board.isLocked(), false);
+        document.getElementById('lock-btn')?.addEventListener('click', (e) => {
+            // Soft-disabled during auto-play (see _setLockBtnAutoPlayDisabled).
+            if (e.currentTarget.getAttribute('aria-disabled') === 'true') return;
+            _setLocked(!Board.isLocked());
+        });
 
         // Turn toggle
         document.getElementById('turn-white')?.addEventListener('click', () => _setTurn('w'));

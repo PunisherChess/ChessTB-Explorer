@@ -529,7 +529,13 @@ a:hover { color: var(--text); }
     flex-direction: column;
     gap: 6px;
 }
-.fen-input-wrap { position: relative; width: 100%; }
+.fen-input-wrap {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
 .fen-input-wrap__label {
     position: absolute;
     left: 10px; top: 50%;
@@ -540,7 +546,9 @@ a:hover { color: var(--text); }
     pointer-events: none; user-select: none; z-index: 1;
 }
 .fen-input {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
     height: 34px;
     padding: 0 10px 0 36px;
     font-family: var(--font-mono);
@@ -586,12 +594,12 @@ a:hover { color: var(--text); }
     flex-shrink: 0;
     user-select: none;
 }
-.btn:hover:not(:disabled) {
+.btn:hover:not(:disabled):not(.is-autoplay-disabled) {
     background: var(--surface-3);
     border-color: var(--border-2);
     color: var(--text);
 }
-.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:active:not(:disabled):not(.is-autoplay-disabled) { transform: scale(0.97); }
 .btn:disabled { opacity: 0.38; cursor: not-allowed; pointer-events: none; }
 
 .btn__icon { flex-shrink: 0; opacity: 0.75; }
@@ -608,6 +616,42 @@ a:hover { color: var(--text); }
 
 /* Auto-play active state */
 .btn.is-playing { color: var(--amber); border-color: var(--amber); }
+
+/* Lock button — sits beside the FEN input, height matched to it (34px).
+   Width comes from the shared .btn--icon-only formula, same as Back/Forward.
+   .lock-icon keeps the same 11px layout box as those icons and scales up to
+   its 14px appearance at paint time, so it doesn't affect button width.
+   .is-locked uses the same gold border/background as other active controls. */
+.btn--lock {
+    height: 34px;
+}
+.btn--lock .lock-icon {
+    width: 11px;
+    height: 11px;
+    transform: scale(1.2727);
+}
+.btn--lock.is-locked {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: var(--gold-glow);
+}
+.btn--lock.is-locked:hover:not(.is-autoplay-disabled) { background: var(--gold-glow); border-color: var(--gold); }
+.btn--lock.is-locked .btn__icon { opacity: 1; }
+/* Soft-disabled during an auto-play run — see _setLockBtnAutoPlayDisabled()
+   in ui.js. Uses a class/aria-disabled rather than the native disabled
+   attribute so the button stays hoverable. */
+.btn--lock.is-autoplay-disabled { opacity: 0.38; cursor: not-allowed; }
+/* Two icons are always present; CSS toggles which is visible via .is-locked. */
+.lock-icon--unlocked { display: block; }
+.lock-icon--locked   { display: none; }
+.btn--lock.is-locked .lock-icon--unlocked { display: none; }
+.btn--lock.is-locked .lock-icon--locked   { display: block; }
+
+/* Spare-piece trays — dimmed while locked. Kept clickable (not
+   pointer-events:none) so they still show a not-allowed cursor; the
+   actual placement is refused at the source in board.js. */
+.spare-tray.is-locked { opacity: 0.35; }
+.spare-tray.is-locked .spare-piece { cursor: not-allowed; }
 
 /* ── Keyboard hint strip ────────────────────────────────────────────── */
 .kbd-hints {
@@ -745,6 +789,14 @@ kbd {
 .board-wrap-inner {
     position: relative;
     width: 360px;
+    display: flex;
+    flex-direction: column;
+}
+/* Set by board.js's _syncTrayOrientation() to mirror chessground's own
+   orientation. column-reverse visually swaps the black/white trays around
+   #board without moving them in the DOM. */
+.board-wrap-inner.orientation-black {
+    flex-direction: column-reverse;
 }
 
 /* ── Chessground sizing ─────────────────────────────────────────────── */
