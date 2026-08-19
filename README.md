@@ -222,7 +222,7 @@ https://huggingface.co/buckets/noobpwnftw/chesstb
 with `wdl/`, `dtc/`, and `dtm50/` subdirectories laid out exactly like the
 local directory structure below. Buckets aren't versioned the way
 regular Hub repos are, so there's no branch segment — the raw file bytes
-for that same folder are served from `/resolve`
+for that same folder are served from `/resolve`,
 mirroring how a normal repo's `/blob/<path>` pairs with its
 `/resolve/<path>`. Point `TABLEBASE_PATH` straight at the `/resolve`
 URL:

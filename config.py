@@ -143,3 +143,12 @@ REMOTE_TIMEOUT_SECS = 20.0
 # Number of attempts for a single remote request before giving up (the
 # request that triggered it then fails, surfacing as a probe error).
 REMOTE_MAX_RETRIES = 3
+
+# Max size of the HTTP connection pool each remote backend's session
+# keeps open against TABLEBASE_PATH's host. Left as None so it scales
+# with PROBE_THREADS automatically (max(PROBE_THREADS * 2, 20)) — set an
+# explicit integer to override. Too small a pool under-serves concurrent
+# probing (connections stop being reused once PROBE_THREADS exceeds it);
+# too large rarely hurts beyond a handful of idle sockets, so there's
+# little reason to set this below the auto-computed value.
+REMOTE_POOL_MAXSIZE = None
