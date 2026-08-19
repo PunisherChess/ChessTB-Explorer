@@ -86,19 +86,19 @@ class _RemoteDiskCache:
     """Soft-budgeted LRU of *whole downloaded table files* on local disk,
     keyed by the remote-relative path each was fetched from.
 
-    Structurally mirrors :class:`remote_source._PageCache` one layer up
-    the stack: same OrderedDict-as-LRU-ledger, same soft byte budget,
-    same per-key lock so concurrent probe threads landing on the same
-    not-yet-cached material download it once rather than once each --
-    just whole files here instead of fixed-size pages, since that's the
-    unit the standard backend's file constructors can consume.
+    Structurally mirrors one shard of :class:`remote_source._PageCache`
+    one layer up the stack: same OrderedDict-as-LRU-ledger, same soft
+    byte budget, same per-key lock so concurrent probe threads landing on
+    the same not-yet-cached material download it once rather than once
+    each -- just whole files here instead of fixed-size pages, since
+    that's the unit the standard backend's file constructors can consume.
 
     A freshly recorded (or freshly touched, via ``has()``) entry always
     ends up at the *end* of the LRU order, and eviction always pops from
     the *front* -- so the file ``_find()`` just resolved a path for can
     never be the one an eviction happening on another thread picks next;
     only entries stale relative to it can be. That closes the same race
-    :meth:`remote_source._PageCache.put` avoids for in-memory pages: a
+    :meth:`remote_source._PageCacheShard.put` avoids for in-memory pages: a
     long-untouched file could still be unlinked out from under a reader
     holding an OS-level file descriptor already open on it, but on POSIX
     an unlinked-but-open file stays readable to that descriptor until
@@ -148,7 +148,7 @@ class _RemoteDiskCache:
             self._sizes[rel_path] = size
             self._cur_bytes += size
             # Keep the just-added file (it's at the end); never evict fully
-            # empty, mirroring remote_source._PageCache.put / chesstb.py's
+            # empty, mirroring remote_source._PageCacheShard.put / chesstb.py's
             # own _BlockCache.record.
             while self._cur_bytes > self.max_bytes and len(self._sizes) > 1:
                 ev_path, ev_size = self._sizes.popitem(last=False)
@@ -185,9 +185,11 @@ class _RemoteCachingTablebase(chesstb.Tablebase):
 
     def __init__(self, base_url: str, *, block_cache_bytes: int,
                  remote_page_cache_bytes: int, remote_page_size: int,
-                 remote_timeout: float, remote_max_retries: int) -> None:
+                 remote_timeout: float, remote_max_retries: int,
+                 remote_pool_maxsize: int) -> None:
         self._client = remote_source.RemoteHTTPClient(
             base_url, timeout=remote_timeout, max_retries=remote_max_retries,
+            pool_maxsize=remote_pool_maxsize,
         )
         self._cache_root = tempfile.mkdtemp(prefix="chesstb_remote_cache_")
         self._disk_cache = _RemoteDiskCache(self._cache_root, remote_page_cache_bytes)
@@ -276,6 +278,7 @@ class _RemoteCachingTablebase(chesstb.Tablebase):
             "block_cache_blocks": blocks,
             "block_cache_bytes":  block_bytes,
             "remote_disk_cache":  self._disk_cache.stats(),
+            "remote_http":        self._client.stats(),
         }
 
 
@@ -285,6 +288,7 @@ def open_tablebase(directory: str, *,
                     remote_page_size: int = remote_source.DEFAULT_PAGE_SIZE,
                     remote_timeout: float = remote_source.DEFAULT_TIMEOUT,
                     remote_max_retries: int = remote_source.DEFAULT_MAX_RETRIES,
+                    remote_pool_maxsize: int = remote_source.DEFAULT_POOL_MAXSIZE,
                     ) -> _RemoteCachingTablebase:
     """Open a remote ChessTB base URL against the standard
     ``chess.chesstb`` module. Same call signature as
@@ -300,4 +304,5 @@ def open_tablebase(directory: str, *,
         remote_page_size=remote_page_size,
         remote_timeout=remote_timeout,
         remote_max_retries=remote_max_retries,
+        remote_pool_maxsize=remote_pool_maxsize,
     )

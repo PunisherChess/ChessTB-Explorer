@@ -205,6 +205,7 @@ class AppConfig:
     remote_page_size_bytes:  int   = field(default=256 * 1024)
     remote_timeout_secs:     float = field(default=20.0)
     remote_max_retries:      int   = field(default=3)
+    remote_pool_maxsize:     int   = field(default=20)
 
     @classmethod
     def from_config(cls) -> "AppConfig":
@@ -215,6 +216,15 @@ class AppConfig:
             _validated_int("PROBE_THREADS", config.PROBE_THREADS)
             if config.PROBE_THREADS is not None
             else min(16, (os.cpu_count() or 4) * 2)
+        )
+        # Same "None means auto" shape as PROBE_THREADS above, computed
+        # from it: a connection pool smaller than the probe thread count
+        # gives up connection reuse for whichever requests land once the
+        # pool is exhausted (see remote/remote_source.py).
+        pool_maxsize = (
+            _validated_int("REMOTE_POOL_MAXSIZE", config.REMOTE_POOL_MAXSIZE)
+            if getattr(config, "REMOTE_POOL_MAXSIZE", None) is not None
+            else max(threads * 2, 20)
         )
 
         return cls(
@@ -241,6 +251,7 @@ class AppConfig:
                 "REMOTE_PAGE_SIZE_BYTES", config.REMOTE_PAGE_SIZE_BYTES),
             remote_timeout_secs=_validated_float("REMOTE_TIMEOUT_SECS", config.REMOTE_TIMEOUT_SECS),
             remote_max_retries=_validated_int("REMOTE_MAX_RETRIES", config.REMOTE_MAX_RETRIES),
+            remote_pool_maxsize=pool_maxsize,
         )
 
 
@@ -301,6 +312,7 @@ try:
                 remote_page_size=cfg.remote_page_size_bytes,
                 remote_timeout=cfg.remote_timeout_secs,
                 remote_max_retries=cfg.remote_max_retries,
+                remote_pool_maxsize=cfg.remote_pool_maxsize,
             )
         else:
             TB = _remote_direct.open_tablebase(
@@ -310,6 +322,7 @@ try:
                 remote_page_size=cfg.remote_page_size_bytes,
                 remote_timeout=cfg.remote_timeout_secs,
                 remote_max_retries=cfg.remote_max_retries,
+                remote_pool_maxsize=cfg.remote_pool_maxsize,
             )
     elif cfg.tablebase_path:
         TB = chesstb.open_tablebase(cfg.tablebase_path, block_cache_bytes=cfg.block_cache_bytes)
