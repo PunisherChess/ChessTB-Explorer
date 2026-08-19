@@ -47,7 +47,7 @@ from concurrent.futures import (
 from dataclasses import dataclass, field
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file
 from functools import lru_cache
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 from waitress import serve as waitress_serve
 import atexit
 import chess
@@ -102,6 +102,25 @@ _remote_download = _load_module_by_path("_chesstb_remote_fallback", _REMOTE_FALL
 _remote_direct = _load_module_by_path("_chesstb_remote_direct", _REMOTE_DIRECT_PATH)
 remote_source = _remote_download.remote_source
 
+# Swap chess.chesstb's pure-Python LZ4 block decoder for the `lz4` package's
+# C-accelerated one. It releases the GIL during decode, which lets
+# PROBE_THREADS achieve real parallelism instead of queueing behind the
+# interpreter lock. See requirements.txt.
+try:
+    import lz4.block as _lz4_block
+
+    def _fast_lz4_decompress_block(src, expected_size, dict_bytes=b""):
+        return _lz4_block.decompress(
+            bytes(src), uncompressed_size=expected_size, dict=bytes(dict_bytes))
+
+    chesstb.lz4_decompress_block = _fast_lz4_decompress_block
+    log.info("chess.chesstb: using lz4 package for block decompression (C-accelerated)")
+except ImportError:
+    log.warning(
+        "chess.chesstb: 'lz4' package not installed -- falling back to the "
+        "slower pure-Python block decoder. `pip install lz4` and restart."
+    )
+
 
 # ── Type aliases ──────────────────────────────────────────────────────────────
 
@@ -109,7 +128,8 @@ class MoveEntry(TypedDict):
     san:         str
     plies:       int
     is_mate:     bool
-    outcome:     str         # "win"|"cursed_win"|"draw"|"blessed_loss"|"loss"|"unknown"
+    outcome:     str         # "win"|"cursed_win"|"draw"|"blessed_loss"|"loss"|"unknown"|"not_available"
+    available:   bool        # False when plies/outcome are a WDL-only fallback (see evaluate_all_moves)
     child_fen:   str | None  # FEN after this move; None for terminal / unknown
     draw_reason: str | None  # "stalemate"|"insufficient_material"|None
 
@@ -346,6 +366,10 @@ def _shutdown_executor() -> None:
 
 @app.after_request
 def set_security_headers(response: Response) -> Response:
+    # base-uri and form-action are set explicitly since default-src doesn't
+    # cover them; object-src, though covered, is set to 'none' since the app
+    # has no use for <object>/<embed>. frame-ancestors 'none' is the CSP
+    # equivalent of the X-Frame-Options: DENY header set below.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -423,6 +447,18 @@ def _effective_distance(wdl: int, raw_distance: int) -> int:
     if raw_distance < 0:
         return raw_distance - 1
     return 0
+
+
+def _capped_wdl(move_wdl: int, root_wdl: int) -> int:
+    """move_wdl capped at root_wdl: a move can never be better than the root
+    position's own optimal value (see _effective_move_wdl). Used to
+    classify a move's outcome from WDL alone, when the metric that would
+    normally supply its distance (DTC or DTM) isn't in the loaded tables
+    for this material — WDL is always present, and already distinguishes
+    win/cursed_win/draw/blessed_loss/loss on its own, so this is the exact
+    fallback bucket for that move, just without a distance to show alongside
+    it."""
+    return root_wdl if move_wdl > root_wdl else move_wdl
 
 
 # ── FEN pre-validation ────────────────────────────────────────────────────────
@@ -506,7 +542,26 @@ def _signed_ply(magnitude: int, wdl: int) -> int:
 
 # ── Raw probe ─────────────────────────────────────────────────────────────────
 
-def _probe_board(board: chess.Board) -> tuple[int, int, int, int, int] | None:
+class _ProbeValues(NamedTuple):
+    """One position's resolved WDL — the only metric every probeable
+    position has — plus whichever of DTC, DTM, and DTM50 the loaded
+    tablebase separately has for it. A material can ship any subset of the
+    three on top of WDL (e.g. WDL+DTC without DTM/DTM50 because a large
+    piece count's DTM50 table is impractically large to generate);
+    has_dtc/has_dtm/has_dtm50 report which of them this exact position
+    actually has. dtc/dtm/dtm50/dtm50_wdl are 0/0/0/None when the matching
+    has_* flag is False."""
+    wdl:       int
+    has_dtc:   bool
+    dtc:       int
+    has_dtm:   bool
+    dtm:       int
+    has_dtm50: bool
+    dtm50_wdl: int | None
+    dtm50:     int
+
+
+def _probe_board(board: chess.Board) -> _ProbeValues | None:
     # A single combined probe() call computes WDL + DTC + DTM + DTM50 together
     # internally no matter what you ask for, so building all four signed
     # values off one ProbeResult's raw fields (via _signed_wdl/_signed_ply
@@ -514,18 +569,28 @@ def _probe_board(board: chess.Board) -> tuple[int, int, int, int, int] | None:
     # separately, which would each trigger their own full probe, redoing
     # that same work 4 times over. This matters a lot here since
     # _probe_board runs per-position on every worker thread in the pool below.
+    #
+    # WDL is the only metric required — a position whose WDL this app can't
+    # resolve isn't probeable at all, and returns None. DTC, DTM, and DTM50
+    # are each independently optional past that baseline; has_dtc/has_dtm/
+    # has_dtm50 carry whichever of the three the loaded tables actually
+    # answered for this position, and callers report the others regardless
+    # of what those say.
     r = TB.probe(board, rule50=board.halfmove_clock)
     if r.status != "ok":
         return None
-    if not (r.has_dtc and r.has_dtm and r.has_dtm50):
+    wdl = _signed_wdl(r.wdl)
+    if wdl is None:
         return None
-    dtm50_wdl, dtm50_plies = _signed_wdl(r.dtm50_wdl), r.dtm50
-    return (
-        _signed_wdl(r.wdl),
-        dtm50_wdl,
-        abs(_signed_ply(r.dtc, r.wdl)),
-        abs(_signed_ply(r.dtm, r.wdl)),
-        dtm50_plies,
+    return _ProbeValues(
+        wdl=wdl,
+        has_dtc=r.has_dtc,
+        dtc=abs(_signed_ply(r.dtc, r.wdl)) if r.has_dtc else 0,
+        has_dtm=r.has_dtm,
+        dtm=abs(_signed_ply(r.dtm, r.wdl)) if r.has_dtm else 0,
+        has_dtm50=r.has_dtm50,
+        dtm50_wdl=_signed_wdl(r.dtm50_wdl) if r.has_dtm50 else None,
+        dtm50=r.dtm50 if r.has_dtm50 else 0,
     )
 
 
@@ -544,7 +609,7 @@ class _InFlightProbe:
 
     def __init__(self) -> None:
         self.done   = threading.Event()
-        self.result: tuple[int, int, int, int, int] | None = None
+        self.result: _ProbeValues | None = None
         self.error:  BaseException | None = None
 
 
@@ -552,7 +617,7 @@ _inflight_lock = threading.Lock()
 _inflight: dict[str, _InFlightProbe] = {}
 
 
-def _probe_fen_deduped(fen: str) -> tuple[int, int, int, int, int] | None:
+def _probe_fen_deduped(fen: str) -> _ProbeValues | None:
     """Runs at most one probe per FEN at a time, however many callers ask.
 
     _probe_fen's lru_cache only dedupes probes that have already *finished* —
@@ -596,7 +661,7 @@ def _probe_fen_deduped(fen: str) -> tuple[int, int, int, int, int] | None:
 
 
 @lru_cache(maxsize=cfg.probe_cache_size)
-def _probe_fen(fen: str) -> tuple[int, int, int, int, int] | None:
+def _probe_fen(fen: str) -> _ProbeValues | None:
     return _probe_fen_deduped(fen)
 
 
@@ -656,7 +721,7 @@ def evaluate_all_moves(
 
     # Phase 2: probe child positions
     unique_fens: set[str] = {child_fen for _, _, _, _, child_fen in move_info if child_fen is not None}
-    probe_cache: dict[str, tuple | None] = {}
+    probe_cache: dict[str, _ProbeValues | None] = {}
 
     # Child FENs that failed for a retryable reason. A probe that timed out is
     # still running in the pool and will populate _probe_fen's own cache, so a
@@ -697,22 +762,38 @@ def evaluate_all_moves(
     dtm_rows:   list[tuple] = []
     dtm50_rows: list[tuple] = []
 
+    # Sort key/entry pair used whenever this material's table for a metric
+    # (DTC or DTM) doesn't cover a move: WDL alone still places the move in
+    # the right win/draw/loss bucket (see _capped_wdl), just without a
+    # distance to show inside that bucket, so it's ranked alongside where
+    # its DTC counterpart would sort rather than dumped in a separate pile.
+    def _wdl_only(my_wdl: int, move_is_mate: bool, draw_reason: str | None) -> tuple[tuple, MoveEntry]:
+        wdl_bucket = _capped_wdl(my_wdl, root_wdl)
+        key = (_outcome_rank(wdl_bucket), 0, san)
+        entry: MoveEntry = {
+            "san": san, "plies": 0, "is_mate": move_is_mate, "available": False,
+            "outcome": _outcome_label(wdl_bucket), "child_fen": child_fen, "draw_reason": draw_reason,
+        }
+        return key, entry
+
     for san, move_is_mate, move_is_zeroing, draw_reason, child_fen in move_info:
 
         if move_is_mate:
             opp_wdl = opp_dtm50_wdl = -2
             opp_dtc = opp_dtm = opp_dtm50 = 0
+            opp_has_dtc = opp_has_dtm = opp_has_dtm50 = True
 
         elif draw_reason:
             opp_wdl = opp_dtm50_wdl = 0
             opp_dtc = opp_dtm = opp_dtm50 = 0
+            opp_has_dtc = opp_has_dtm = opp_has_dtm50 = True
 
         else:
             probe_result = probe_cache.get(child_fen)
             if probe_result is None:
                 log.warning("No probe result for %s (%s); showing unknown.", child_fen, san)
                 stub: MoveEntry = {
-                    "san": san, "plies": 0, "is_mate": False,
+                    "san": san, "plies": 0, "is_mate": False, "available": False,
                     "outcome": "unknown", "child_fen": child_fen, "draw_reason": None,
                 }
                 stub_key = (_outcome_rank(0) + 10, 0, san)
@@ -720,56 +801,89 @@ def evaluate_all_moves(
                 dtm_rows.append((stub_key, stub))
                 dtm50_rows.append((stub_key, stub))
                 continue
-            opp_wdl, opp_dtm50_wdl, opp_dtc, opp_dtm, opp_dtm50 = probe_result
+            opp_wdl = probe_result.wdl
+            opp_has_dtc, opp_dtc = probe_result.has_dtc, probe_result.dtc
+            opp_has_dtm, opp_dtm = probe_result.has_dtm, probe_result.dtm
+            opp_has_dtm50 = probe_result.has_dtm50
+            opp_dtm50_wdl, opp_dtm50 = probe_result.dtm50_wdl, probe_result.dtm50
 
-        my_wdl       = -opp_wdl
-        my_dtm50_wdl = -opp_dtm50_wdl
-        my_dtm50 = _apply_sign(opp_dtm50, my_dtm50_wdl)
-        eff_dtm50 = _effective_distance(my_dtm50_wdl, my_dtm50)
+        my_wdl = -opp_wdl
 
-        my_dtc = _apply_sign(opp_dtc, my_wdl)
-        my_dtm = _apply_sign(opp_dtm, my_wdl)
+        # DTC row. Falls back to a WDL-only bucket when this material has no
+        # DTC table; that fallback also doubles as the DTM row's own bucket
+        # below when DTC is available but DTM isn't, so a move's win/draw/
+        # loss classification never depends on which of the two happens to
+        # be missing.
+        if opp_has_dtc:
+            my_dtc = _apply_sign(opp_dtc, my_wdl)
+            # If this move is itself a zeroing move (capture/pawn-push/
+            # promotion), it IS the conversion, so its DTC is 1 ply — not
+            # 1 + the child position's own distance to *its* next
+            # conversion, which is what feeding my_dtc straight into
+            # _effective_distance would compute (double-counting a second
+            # conversion event nobody asked for). _effective_distance
+            # already has a branch for exactly this ("no further distance
+            # needed, the move itself resolves it"), so just call it with
+            # raw_distance=0 instead of reimplementing that branch here.
+            eff_dtc = (_effective_distance(my_wdl, 0) if move_is_zeroing
+                       else _effective_distance(my_wdl, my_dtc))
+            eff_wdl = _effective_move_wdl(my_wdl, root_wdl, eff_dtc)
+            outcome = _outcome_label(eff_wdl)
+            dtz_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtc), san)
+            dtz_rows.append((dtz_key, {
+                "san": san, "plies": abs(eff_dtc), "is_mate": move_is_mate, "available": True,
+                "outcome": outcome, "child_fen": child_fen, "draw_reason": draw_reason,
+            }))
+        else:
+            dtz_key, dtz_entry = _wdl_only(my_wdl, move_is_mate, draw_reason)
+            dtz_rows.append((dtz_key, dtz_entry))
 
-        # If this move is itself a zeroing move (capture/pawn-push/promotion),
-        # it IS the conversion, so its DTC is 1 ply — not
-        # 1 + the child position's own distance to *its* next conversion,
-        # which is what feeding my_dtc straight into _effective_distance
-        # would compute (double-counting a second conversion event nobody
-        # asked for). _effective_distance already has a branch for exactly
-        # this ("no further distance needed, the move itself resolves it"),
-        # so just call it with raw_distance=0 instead of reimplementing that
-        # branch here.
-        eff_dtc = (_effective_distance(my_wdl, 0) if move_is_zeroing
-                   else _effective_distance(my_wdl, my_dtc))
-        eff_dtm = _effective_distance(my_wdl, my_dtm)
+        # DTM row.
+        if opp_has_dtm:
+            my_dtm = _apply_sign(opp_dtm, my_wdl)
+            eff_dtm = _effective_distance(my_wdl, my_dtm)
+            if opp_has_dtc:
+                # DTC and DTM share the same win/cursed-win (loss/blessed-
+                # loss) bucket and label as the DTC row above, since that
+                # status is a single fact about eff_dtc and root_wdl rather
+                # than a separate one per metric.
+                dtm_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtm), san)
+                dtm_outcome = outcome
+            else:
+                # No DTC on this material to derive a shared bucket from —
+                # fall back to DTM's own distance for the win/cursed-win
+                # split instead.
+                dtm_eff_wdl = _effective_move_wdl(my_wdl, root_wdl, eff_dtm)
+                dtm_key = (_outcome_rank(dtm_eff_wdl), _ply_rank(dtm_eff_wdl, eff_dtm), san)
+                dtm_outcome = _outcome_label(dtm_eff_wdl)
+            dtm_rows.append((dtm_key, {
+                "san": san, "plies": abs(eff_dtm), "is_mate": move_is_mate, "available": True,
+                "outcome": dtm_outcome, "child_fen": child_fen, "draw_reason": draw_reason,
+            }))
+        else:
+            key, entry = _wdl_only(my_wdl, move_is_mate, draw_reason)
+            dtm_rows.append((key, entry))
 
-        # DTC and DTM share the same win/cursed-win (loss/blessed-loss)
-        # bucket, since that status is a single fact about eff_dtc and
-        # root_wdl rather than a separate one per metric — see
-        # _effective_move_wdl. Both the label shown for this move and the
-        # bucket its sort key ranks it in come from that same value, so the
-        # two always agree; only the ply used to break ties within a
-        # bucket differs between the two keys.
-        eff_wdl = _effective_move_wdl(my_wdl, root_wdl, eff_dtc)
-        outcome = _outcome_label(eff_wdl)
-
-        dtz_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtc), san)
-        dtz_rows.append((dtz_key, {
-            "san": san, "plies": abs(eff_dtc), "is_mate": move_is_mate,
-            "outcome": outcome, "child_fen": child_fen, "draw_reason": draw_reason,
-        }))
-
-        dtm_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtm), san)
-        dtm_rows.append((dtm_key, {
-            "san": san, "plies": abs(eff_dtm), "is_mate": move_is_mate,
-            "outcome": outcome, "child_fen": child_fen, "draw_reason": draw_reason,
-        }))
-
-        dtm50_key = (_outcome_rank(my_dtm50_wdl), _ply_rank(my_dtm50_wdl, eff_dtm50), san)
-        dtm50_rows.append((dtm50_key, {
-            "san": san, "plies": abs(eff_dtm50), "is_mate": move_is_mate,
-            "outcome": _outcome_label(my_dtm50_wdl), "child_fen": child_fen, "draw_reason": draw_reason,
-        }))
+        # DTM50 row. Unlike DTC/DTM, DTM50 carries its own rule50-aware WDL
+        # (dtm50_wdl) that can genuinely differ from the main WDL, so there's
+        # no sound way to guess its outcome from the main WDL when it's
+        # missing — the row is flatly "not_available" rather than a WDL-only
+        # win/draw/loss guess.
+        if opp_has_dtm50:
+            my_dtm50_wdl = -opp_dtm50_wdl
+            my_dtm50 = _apply_sign(opp_dtm50, my_dtm50_wdl)
+            eff_dtm50 = _effective_distance(my_dtm50_wdl, my_dtm50)
+            dtm50_key = (_outcome_rank(my_dtm50_wdl), _ply_rank(my_dtm50_wdl, eff_dtm50), san)
+            dtm50_rows.append((dtm50_key, {
+                "san": san, "plies": abs(eff_dtm50), "is_mate": move_is_mate, "available": True,
+                "outcome": _outcome_label(my_dtm50_wdl), "child_fen": child_fen, "draw_reason": draw_reason,
+            }))
+        else:
+            dtm50_key = (_outcome_rank(0) + 10, 0, san)
+            dtm50_rows.append((dtm50_key, {
+                "san": san, "plies": 0, "is_mate": move_is_mate, "available": False,
+                "outcome": "not_available", "child_fen": child_fen, "draw_reason": draw_reason,
+            }))
 
     dtz_rows.sort(key=lambda r: r[0])
     dtm_rows.sort(key=lambda r: r[0])
@@ -868,6 +982,7 @@ def _evaluate_fen_impl(fen: str) -> str:
     if board.is_checkmate():
         return json.dumps({
             "wdl": -2, "dtz": 0, "dtm": 0, "dtm50": [-2, 0],
+            "dtz_available": True, "dtm_available": True, "dtm50_available": True,
             "moves_dtz": [], "moves_dtm": [], "moves_dtm50": [],
             "summary": {"wins": 0, "draws": 0, "losses": 0, "unknown": 0},
             "draw_reason": None,
@@ -876,6 +991,7 @@ def _evaluate_fen_impl(fen: str) -> str:
     if board.is_stalemate() or board.is_insufficient_material():
         return json.dumps({
             "wdl": 0, "dtz": 0, "dtm": 0, "dtm50": [0, 0],
+            "dtz_available": True, "dtm_available": True, "dtm50_available": True,
             "moves_dtz": [], "moves_dtm": [], "moves_dtm50": [],
             "summary": {"wins": 0, "draws": 0, "losses": 0, "unknown": 0},
             "draw_reason": "stalemate" if board.is_stalemate() else "insufficient_material",
@@ -885,11 +1001,10 @@ def _evaluate_fen_impl(fen: str) -> str:
     root = _probe_fen(fen)
     if root is None:
         raise chesstb.MissingTableError(f"Position not in tablebase: {fen}")
-    root_wdl, root_dtm50_wdl, root_dtc, root_dtm, root_dtm50 = root
 
     bypass_parallel = getattr(_evaluate_tls, "bypass_parallel", False)
     moves_dtz, moves_dtm, moves_dtm50, complete = evaluate_all_moves(
-        board, root_wdl, bypass_parallel=bypass_parallel, precomputed_move_info=precomputed_move_info,
+        board, root.wdl, bypass_parallel=bypass_parallel, precomputed_move_info=precomputed_move_info,
     )
 
     # Outcome summary across all legal moves.
@@ -901,16 +1016,25 @@ def _evaluate_fen_impl(fen: str) -> str:
         "unknown": sum(1 for o in outcomes if o == "unknown"),
     }
 
+    # dtz/dtm/dtm50 are the root's own metrics, each independently
+    # unavailable when this material has no DTC/DTM/DTM50 table — see
+    # _probe_board. The paired *_available flag is the authoritative signal
+    # for that; the value fields fall back to null/[null, null] rather than
+    # being omitted, so every response has the same fixed shape regardless
+    # of coverage.
     json_str = json.dumps({
-        "wdl":          root_wdl,
-        "dtz":          root_dtc,
-        "dtm":          root_dtm,
-        "dtm50":        [root_dtm50_wdl, root_dtm50],
-        "moves_dtz":    moves_dtz,
-        "moves_dtm":    moves_dtm,
-        "moves_dtm50":  moves_dtm50,
-        "summary":      summary,
-        "draw_reason":  None,   # root always has legal moves here, so never terminal
+        "wdl":              root.wdl,
+        "dtz":              root.dtc if root.has_dtc else None,
+        "dtz_available":    root.has_dtc,
+        "dtm":              root.dtm if root.has_dtm else None,
+        "dtm_available":    root.has_dtm,
+        "dtm50":            [root.dtm50_wdl, root.dtm50] if root.has_dtm50 else [None, None],
+        "dtm50_available":  root.has_dtm50,
+        "moves_dtz":        moves_dtz,
+        "moves_dtm":        moves_dtm,
+        "moves_dtm50":      moves_dtm50,
+        "summary":          summary,
+        "draw_reason":      None,   # root always has legal moves here, so never terminal
     })
     if not complete:
         raise _IncompleteResult(json_str)
@@ -1006,6 +1130,30 @@ def probe() -> Response:
         return jsonify({"error": "Internal server error."}), 500
 
 
+def _stream_error_payload(fen: str, exc: BaseException) -> dict:
+    """SSE error payload for an exception raised while probing fen, keeping
+    wording, error_code, and logging identical no matter which probe step
+    inside probe_stream() raised it."""
+    if isinstance(exc, chesstb.MissingTableError):
+        return {"status": "error", **_missing_table_error_payload(fen)}
+    if isinstance(exc, _REMOTE_SOURCE_ERRORS):
+        log.warning("Remote tablebase fetch failed in probe/stream for %s: %s", fen, exc)
+        return {
+            "status": "error",
+            "error": "Could not reach the remote tablebase. Try again shortly.",
+            "error_code": "remote_unavailable",
+        }
+    if isinstance(exc, ProbeInFlightTimeout):
+        log.warning("%s", exc)
+        return {
+            "status": "error",
+            "error": "Probe timed out. Try again shortly.",
+            "error_code": "probe_timeout",
+        }
+    log.exception("Error in probe/stream for %s", fen)
+    return {"status": "error", "error": str(exc)}
+
+
 @app.route("/probe/stream", methods=["POST"])
 def probe_stream() -> Response:
     body = request.get_json(silent=True)
@@ -1028,6 +1176,30 @@ def probe_stream() -> Response:
         except (RuntimeError, ValueError) as e:
             yield _sse({"status": "error", "error": str(e)})
             return
+
+        # A terminal root (checkmate, stalemate, insufficient material) never
+        # reaches the tablebase — see evaluate_fen()'s own early return for
+        # these — so only a non-terminal root needs its coverage confirmed
+        # here. Checking the root before pre-warming any child means a root
+        # the tablebase doesn't cover is caught immediately: no child of an
+        # uncovered root is coverable either, so pre-warming first would only
+        # probe the entire move list to discover that after the fact. This
+        # reads through the same cache evaluate_fen() itself reads below, so
+        # a covered root costs nothing extra downstream.
+        terminal = (
+            root_board.is_checkmate()
+            or root_board.is_stalemate()
+            or root_board.is_insufficient_material()
+        )
+        if not terminal:
+            try:
+                root_probe = _probe_fen(fen)
+            except Exception as e:
+                yield _sse(_stream_error_payload(fen, e))
+                return
+            if root_probe is None:
+                yield _sse({"status": "error", **_missing_table_error_payload(fen)})
+                return
 
         move_info = _collect_move_info(root_board)
         child_fens: set[str] = {child_fen for _, _, _, _, child_fen in move_info if child_fen is not None}
@@ -1079,25 +1251,8 @@ def probe_stream() -> Response:
         try:
             result = json.loads(evaluate_fen(fen))
             yield _sse({"status": "done", **result})
-        except chesstb.MissingTableError:
-            yield _sse({"status": "error", **_missing_table_error_payload(fen)})
-        except _REMOTE_SOURCE_ERRORS as e:
-            log.warning("Remote tablebase fetch failed in probe/stream for %s: %s", fen, e)
-            yield _sse({
-                "status": "error",
-                "error": "Could not reach the remote tablebase. Try again shortly.",
-                "error_code": "remote_unavailable",
-            })
-        except ProbeInFlightTimeout as e:
-            log.warning("%s", e)
-            yield _sse({
-                "status": "error",
-                "error": "Probe timed out. Try again shortly.",
-                "error_code": "probe_timeout",
-            })
         except Exception as e:
-            log.exception("Error in probe/stream for %s", fen)
-            yield _sse({"status": "error", "error": str(e)})
+            yield _sse(_stream_error_payload(fen, e))
         finally:
             _evaluate_tls.bypass_parallel = False
             _evaluate_tls.board     = None

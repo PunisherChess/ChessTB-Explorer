@@ -147,6 +147,10 @@ const Tablebase = (() => {
     }
     function _isWin(o)  { return o === 'win'  || o === 'cursed_win'; }
     function _isLoss(o) { return o === 'loss' || o === 'blessed_loss'; }
+    // CSV plies for a move/root entry: 'N/A' rather than a bare 0 when
+    // available is false, so an unavailable metric doesn't read in the
+    // exported file as if it were real 0-ply data.
+    function _csvPlies(entry) { return entry.available === false ? 'N/A' : entry.plies; }
 
     // ── Progress bar ──────────────────────────────────────────────────────────
     function _showProgress(completed, total) {
@@ -194,9 +198,13 @@ const Tablebase = (() => {
         if (entry.is_mate)                                    scoreText = 'Checkmate';
         else if (entry.draw_reason === 'stalemate')           scoreText = 'Stalemate';
         else if (entry.outcome === 'draw')                    scoreText = 'Draw';
+        else if (entry.outcome === 'unknown')                 scoreText = 'Unknown';
+        else if (entry.outcome === 'not_available')           scoreText = 'Not Available';
+        else if (!entry.available)                            scoreText = withLabel
+            ? (_isWin(entry.outcome) ? 'Win (Not Available)' : 'Loss (Not Available)')
+            : 'N/A';
         else if (withLabel && _isWin(entry.outcome))          scoreText = `Win in ${_pliesText(entry.plies)}`;
         else if (withLabel && _isLoss(entry.outcome))         scoreText = `Loss in ${_pliesText(entry.plies)}`;
-        else if (entry.outcome === 'unknown')                 scoreText = 'Unknown';
         else                                                   scoreText = _pliesText(entry.plies);
 
         const scoreCell = document.createElement('td');
@@ -298,9 +306,30 @@ const Tablebase = (() => {
         // correctly as "Draw" through the normal outcome formatting below.)
         const rootIsMate = maxRows === 0 && data.wdl !== 0;
 
-        const dtcEntry   = { san: _ROOT_LABEL, plies: data.dtz,      outcome: _wdlToOutcome(data.wdl),      is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null };
-        const dtmEntry   = { san: _ROOT_LABEL, plies: data.dtm,      outcome: _wdlToOutcome(data.wdl),      is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null };
-        const dtm50Entry = { san: _ROOT_LABEL, plies: data.dtm50[1], outcome: _wdlToOutcome(data.dtm50[0]), is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null };
+        // dtc/dtm fall back to _wdlToOutcome(data.wdl) even when
+        // *_available is false — WDL alone already distinguishes win/
+        // cursed_win/draw/blessed_loss/loss, so it's the exact fallback
+        // bucket for the root's own metric too, same as for a move (see
+        // evaluate_all_moves/_capped_wdl on the backend); only the plies
+        // shown are gated on availability. dtm50 has no such fallback:
+        // it carries its own rule50-aware WDL, unknowable from data.wdl,
+        // so it's flatly "not_available" instead.
+        const dtcEntry = {
+            san: _ROOT_LABEL, plies: data.dtz_available ? data.dtz : 0,
+            outcome: _wdlToOutcome(data.wdl), available: data.dtz_available,
+            is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null,
+        };
+        const dtmEntry = {
+            san: _ROOT_LABEL, plies: data.dtm_available ? data.dtm : 0,
+            outcome: _wdlToOutcome(data.wdl), available: data.dtm_available,
+            is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null,
+        };
+        const dtm50Entry = {
+            san: _ROOT_LABEL, plies: data.dtm50_available ? data.dtm50[1] : 0,
+            outcome: data.dtm50_available ? _wdlToOutcome(data.dtm50[0]) : 'not_available',
+            available: data.dtm50_available,
+            is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null,
+        };
 
         const cells = [
             ..._createMoveCells(dtcEntry,   'group-dtc',   false, false),
@@ -559,18 +588,19 @@ const Tablebase = (() => {
         if (_showRootRow) {
             lines.push([
                 '',
-                _ROOT_LABEL, _lastData.dtz,      _wdlToOutcome(_lastData.wdl),
-                _ROOT_LABEL, _lastData.dtm,      _wdlToOutcome(_lastData.wdl),
-                _ROOT_LABEL, _lastData.dtm50[1], _wdlToOutcome(_lastData.dtm50[0]),
+                _ROOT_LABEL, _lastData.dtz_available   ? _lastData.dtz      : 'N/A', _wdlToOutcome(_lastData.wdl),
+                _ROOT_LABEL, _lastData.dtm_available   ? _lastData.dtm      : 'N/A', _wdlToOutcome(_lastData.wdl),
+                _ROOT_LABEL, _lastData.dtm50_available ? _lastData.dtm50[1] : 'N/A',
+                             _lastData.dtm50_available ? _wdlToOutcome(_lastData.dtm50[0]) : 'not_available',
             ].join(','));
         }
         for (let i = 0; i < rows; i++) {
             const d0 = dtz[i],   d1 = dtm[i],   d2 = dtm50[i];
             lines.push([
                 i + 1,
-                d0 ? d0.san : '', d0 ? d0.plies : '', d0 ? d0.outcome : '',
-                d1 ? d1.san : '', d1 ? d1.plies : '', d1 ? d1.outcome : '',
-                d2 ? d2.san : '', d2 ? d2.plies : '', d2 ? d2.outcome : '',
+                d0 ? d0.san : '', d0 ? _csvPlies(d0) : '', d0 ? d0.outcome : '',
+                d1 ? d1.san : '', d1 ? _csvPlies(d1) : '', d1 ? d1.outcome : '',
+                d2 ? d2.san : '', d2 ? _csvPlies(d2) : '', d2 ? d2.outcome : '',
             ].join(','));
         }
         const blob = new Blob([lines.join('\n')], { type: 'text/csv' });

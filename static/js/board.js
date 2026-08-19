@@ -69,6 +69,13 @@ const Board = (() => {
 
     let _pendingPromotion = null;
 
+    // ── Lock mode ────────────────────────────────────────────────────────────
+    // When true, the board only accepts legal moves for the side to move;
+    // spare-piece placement and off-board deletion are disabled. Toggled via
+    // setLocked(). Moves played through the ranked-moves table, auto-play, or
+    // the PGN panel are unaffected, since those are already always legal.
+    let _locked = false;
+
     // [orig, dest] of the most recently played/navigated-to move, or
     // undefined. Fed into chessground's `lastMove` config on every sync.
     // Tracked separately from the move tree because Back/Forward/goToNode
@@ -175,6 +182,20 @@ const Board = (() => {
         return Theme.pieceThemeFn()(piece);
     }
 
+    // Builds chessground's `movable.dests` shape (Map<Key, Key[]>) from
+    // chess.js's legal-move list, grouped by origin square. Only consulted
+    // while locked — see _syncChessground() below.
+    function _legalDestsMap() {
+        const dests = new Map();
+        if (!_game) return dests;
+        _game.moves({ verbose: true }).forEach(m => {
+            const list = dests.get(m.from);
+            if (list) list.push(m.to);
+            else dests.set(m.from, [m.to]);
+        });
+        return dests;
+    }
+
     // ── Chessground sync ──────────────────────────────────────────────────────
     // The single point where _game's state is pushed into chessground.
     // Called unconditionally after every position-changing action — even a
@@ -192,6 +213,16 @@ const Board = (() => {
             turnColor: _game.turn() === 'w' ? 'white' : 'black',
             check:     _game.isCheck() ? (_game.turn() === 'w' ? 'white' : 'black') : false,
             lastMove:  _lastMoveKeys,
+            // Locked: restrict dragging/click-move to the side to move's
+            // legal destinations. Unlocked: free editing.
+            movable: {
+                free:  !_locked,
+                color: _locked ? (_game.turn() === 'w' ? 'white' : 'black') : 'both',
+                dests: _locked ? _legalDestsMap() : undefined,
+            },
+            // Off-board drop-to-delete is disabled while locked, same as the
+            // spare trays below.
+            draggable: { deleteOnDropOff: !_locked },
         });
     }
 
@@ -397,15 +428,18 @@ const Board = (() => {
             // Path 1: click tray piece, then click a square — handled by
             // this click listener (arms _clickPlacePiece) plus _onCgSelect()
             // (does the actual placement), wired in init()'s Config.events.select.
+            // Disabled while locked (tray is also dimmed — see setLocked()).
             btn.addEventListener('click', () => {
+                if (_locked) return;
                 setClickPlacePiece(_clickPlacePiece === code ? null : code);
             });
 
             // Path 2: drag a tray piece directly onto the board. `force:
             // true` is required — cg.dragNewPiece() without it refuses to
             // overwrite an occupied square, and dropping a spare piece onto
-            // an occupied square is expected to replace it.
+            // an occupied square is expected to replace it. Disabled while locked.
             btn.addEventListener('pointerdown', e => {
+                if (_locked) return;
                 if (e.button !== undefined && e.button !== 0) return;   // primary pointer only
                 cg.dragNewPiece(_toCgPiece(code), e, /* force */ true);
             });
@@ -465,6 +499,11 @@ const Board = (() => {
     function _restoredOrientation() {
         try { return localStorage.getItem('chesstb_orientation') === 'black' ? 'black' : 'white'; }
         catch (_) { return 'white'; }
+    }
+
+    function _restoredLocked() {
+        try { return localStorage.getItem('chesstb_locked') === 'true'; }
+        catch (_) { return false; }
     }
 
     function init(onPositionChange, initialFen) {
@@ -562,6 +601,12 @@ const Board = (() => {
 
         _populateTrayImages();
         _initSpareTrays();
+        _syncTrayOrientation();
+
+        // Restored the same way orientation is above — persist:false since
+        // this is a stored preference being applied on load, not a new one
+        // being set, so it's not written straight back to the same key.
+        setLocked(_restoredLocked(), false);
 
         return loadError ? { ok: false, reason: loadError } : { ok: true };
     }
@@ -628,13 +673,42 @@ const Board = (() => {
         return resetFen;
     }
 
+    // Mirrors chessground's own orientation as a class on #board-wrap-inner;
+    // main.css uses it to flip flex-direction so the spare-piece trays swap
+    // sides visually without moving them in the DOM.
+    function _syncTrayOrientation() {
+        const wrapEl = document.getElementById('board-wrap-inner');
+        if (wrapEl) wrapEl.classList.toggle('orientation-black', cg.state.orientation === 'black');
+    }
+
     function flip() {
         cg.toggleOrientation();
+        _syncTrayOrientation();
         try { localStorage.setItem('chesstb_orientation', cg.state.orientation); } catch (_) {}
         clearArrows();   // arrows are orientation-dependent; caller (ui.js) redraws right after flip
     }
 
     function currentFen()   { return _game.fen(); }
+
+    // ── Lock mode (public) ───────────────────────────────────────────────────
+    // Toggles legal-moves-only board interaction. Persisted to localStorage
+    // the same way orientation is (see flip()) when persist defaults to
+    // true; callers applying an already-known value (init() restoring on
+    // load, or ui.js's auto-play engaging/releasing Lock) pass persist:false.
+    function setLocked(locked, persist = true) {
+        _locked = !!locked;
+        if (_locked) setClickPlacePiece(null);   // drop any armed spare piece
+        document.querySelectorAll('.spare-tray').forEach(el => {
+            el.classList.toggle('is-locked', _locked);
+            if (_locked) el.setAttribute('title', 'Board is locked');
+            else el.removeAttribute('title');
+        });
+        if (persist) {
+            try { localStorage.setItem('chesstb_locked', String(_locked)); } catch (_) {}
+        }
+        _syncChessground();
+    }
+    function isLocked() { return _locked; }
 
     function playMove(san) {
         let move = null;
@@ -831,6 +905,7 @@ const Board = (() => {
         getMoveHistory, getStartFen, setOnMoveHistoryChange,
         drawArrows, clearArrows,
         setClickPlacePiece,
+        setLocked, isLocked,
     };
 
 })();

@@ -25,6 +25,7 @@ are original and licensed under the terms in [`LICENSE`](LICENSE).
 | Board textures (blue3, wood4, leather) | — | `AGPL-3.0-or-later` | Asset |
 | [chess](https://github.com/noobpwnftw/python-chess) (`add-chesstb-tablebases` fork) | latest on branch | `GPL-3.0-or-later` | Python |
 | [Flask](https://github.com/pallets/flask) | `>=3.0,<4.0` | `BSD-3-Clause` | Python |
+| [lz4](https://github.com/python-lz4/python-lz4) | `>=4.0,<5.0` | `BSD-3-Clause` | Python |
 | [waitress](https://github.com/Pylons/waitress) | `>=3.0,<4.0` | `ZPL-2.1` | Python |
 | [requests](https://github.com/psf/requests) | `>=2.31,<3.0` | `Apache-2.0` | Python |
 
@@ -89,6 +90,7 @@ another user, whether by distribution or network access.
 |---|---|---|
 | `chess` (installed from `noobpwnftw/python-chess`, `add-chesstb-tablebases` branch) | `GPL-3.0-or-later` | Fork of [niklasf/python-chess](https://github.com/niklasf/python-chess). Both the base `chess` package and `chess.chesstb` are imported directly by `app.py`. |
 | Flask | `BSD-3-Clause` | [pallets/flask](https://github.com/pallets/flask) |
+| lz4 | `BSD-3-Clause` | [python-lz4/python-lz4](https://github.com/python-lz4/python-lz4). Optional but recommended: `app.py` uses it to accelerate `chess.chesstb`'s block decompression at startup if present, falling back to `chess.chesstb`'s own pure-Python decoder (with a warning log) if not. |
 | waitress | `ZPL-2.1` | [Pylons/waitress](https://github.com/Pylons/waitress) |
 | requests | `Apache-2.0` | [psf/requests](https://github.com/psf/requests). Imported only when `TABLEBASE_PATH` is a remote `http(s)://` URL (`remote/remote_source.py`, `remote/remote_fallback.py`). |
 

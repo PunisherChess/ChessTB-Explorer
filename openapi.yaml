@@ -140,14 +140,24 @@ components:
           description: >-
             Distance in plies. 1 for a move that delivers immediate
             checkmate (the move itself is the mate); 0 for a move that
-            ends the game immediately as a draw (stalemate or
-            insufficient material) and for an unprobed/unknown move.
+            ends the game immediately as a draw (stalemate or insufficient
+            material), for an unprobed/unknown move, or when available is
+            false.
         is_mate:
           type: boolean
           description: True if this move delivers immediate checkmate
         outcome:
           type: string
-          enum: [win, cursed_win, draw, blessed_loss, loss, unknown]
+          enum: [win, cursed_win, draw, blessed_loss, loss, unknown, not_available]
+        available:
+          type: boolean
+          description: >-
+            False when this material's tablebase has no table for this
+            entry's metric (DTC, DTM, or DTM50 — WDL is always available).
+            plies is 0 in that case; outcome still reports a WDL-derived
+            win/cursed_win/draw/blessed_loss/loss bucket for DTC/DTM rows,
+            but is flatly not_available for a DTM50 row, since DTM50's own
+            rule50-aware WDL can't be derived from the main WDL.
         child_fen:
           type: string
           nullable: true
@@ -176,16 +186,33 @@ components:
           description: Root position WDL (2=win, 1=cursed win, 0=draw, -1=blessed loss, -2=loss)
         dtz:
           type: integer
-          description: Distance to Zero (distance to conversion) in plies
+          nullable: true
+          description: >-
+            Distance to Zero (distance to conversion) in plies; null when
+            dtz_available is false
+        dtz_available:
+          type: boolean
+          description: False when this material's tablebase has no DTC table
         dtm:
           type: integer
-          description: Distance to Mate in plies
+          nullable: true
+          description: Distance to Mate in plies; null when dtm_available is false
+        dtm_available:
+          type: boolean
+          description: False when this material's tablebase has no DTM table
         dtm50:
           type: array
-          items: {type: integer}
+          items:
+            type: integer
+            nullable: true
           minItems: 2
           maxItems: 2
-          description: "[wdl_under_50move_rule, plies_to_mate_under_50move_rule]"
+          description: >-
+            [wdl_under_50move_rule, plies_to_mate_under_50move_rule];
+            [null, null] when dtm50_available is false
+        dtm50_available:
+          type: boolean
+          description: False when this material's tablebase has no DTM50 table
         draw_reason:
           type: string
           nullable: true

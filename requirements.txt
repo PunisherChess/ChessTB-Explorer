@@ -39,6 +39,17 @@ waitress>=3.0,<4.0
 #   pip install -e ../python-chess
 chess @ git+https://github.com/noobpwnftw/python-chess.git@add-chesstb-tablebases
 
+# --- C-accelerated tablebase block decompression -------------------------
+# chess.chesstb ships a pure-Python LZ4 block decoder as a fallback for
+# environments without this package; app.py swaps it out for this one at
+# startup (see the "ChessTB backend" section, right after the remote
+# backends are loaded) because the pure-Python path is dramatically slower
+# and holds the GIL for its entire decode, which quietly caps how much real
+# parallelism PROBE_THREADS can ever deliver. Not a hard requirement --
+# app.py falls back to the stock decoder with a warning log if this isn't
+# installed -- but installing it is strongly recommended for any real use.
+lz4>=4.0,<5.0
+
 # --- HTTP client for a remote (URL) TABLEBASE_PATH ------------------------
 # Used by remote/remote_source.py and remote/remote_fallback.py (see
 # README.md → "Getting the tablebase files") to support pointing
