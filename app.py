@@ -3,7 +3,7 @@ app.py — ChessTB Explorer back-end
 
 A single-file Flask application that probes a ChessTB endgame tablebase
 for a submitted FEN position and returns every legal move ranked by
-Distance to Conversion (DTC), Distance to Mate (DTM), and DTM under the
+Distance to Zeroing (DTZ), Distance to Mate (DTM), and DTM under the
 50-move rule (DTM50).
 
 Routes
@@ -84,7 +84,7 @@ def _load_module_by_path(module_name: str, path: str):
 
 # chess.chesstb comes from noobpwnftw's add-chesstb-tablebases fork of
 # python-chess (see requirements.txt) — open_tablebase, ProbeResult's raw
-# wdl/dtc/dtm/dtm50 fields, MissingTableError, and the WIN/CURSED_WIN/DRAW/
+# wdl/dtz/dtm/dtm50 fields, MissingTableError, and the WIN/CURSED_WIN/DRAW/
 # BLESSED_LOSS/LOSE constants all come from that module.
 import chess.chesstb as chesstb
 
@@ -466,7 +466,7 @@ def _capped_wdl(move_wdl: int, root_wdl: int) -> int:
     """move_wdl capped at root_wdl: a move can never be better than the root
     position's own optimal value (see _effective_move_wdl). Used to
     classify a move's outcome from WDL alone, when the metric that would
-    normally supply its distance (DTC or DTM) isn't in the loaded tables
+    normally supply its distance (DTZ or DTM) isn't in the loaded tables
     for this material — WDL is always present, and already distinguishes
     win/cursed_win/draw/blessed_loss/loss on its own, so this is the exact
     fallback bucket for that move, just without a distance to show alongside
@@ -523,8 +523,8 @@ def _validate_fen_format(fen: str) -> str | None:
 # ── Signed-value helpers ──────────────────────────────────────────────────────
 #
 # The standard chess.chesstb backend's ProbeResult only carries the raw,
-# unsigned wdl/dtc/dtm/dtm50_wdl/dtm50 fields — no convenience signed_wdl/
-# signed_dtc/signed_dtm/signed_dtm50 properties. Reproducing the same signed
+# unsigned wdl/dtz/dtm/dtm50_wdl/dtm50 fields — no convenience signed_wdl/
+# signed_dtz/signed_dtm/signed_dtm50 properties. Reproducing the same signed
 # WDL convention ourselves (matching chess.syzygy: +2 win, +1 cursed win,
 # 0 draw, -1 blessed loss, -2 loss) directly off the raw fields and the
 # public WIN/CURSED_WIN/DRAW/BLESSED_LOSS/LOSE constants is what
@@ -545,7 +545,7 @@ def _signed_wdl(wdl: int) -> int | None:
 
 def _signed_ply(magnitude: int, wdl: int) -> int:
     """Signed ply count for a raw (magnitude, wdl) pair, as returned by
-    ProbeResult's dtc/dtm/dtm50 fields alongside their wdl/dtm50_wdl."""
+    ProbeResult's dtz/dtm/dtm50 fields alongside their wdl/dtm50_wdl."""
     if wdl in (chesstb.WIN, chesstb.CURSED_WIN):
         return magnitude
     if wdl in (chesstb.LOSE, chesstb.BLESSED_LOSS):
@@ -557,16 +557,16 @@ def _signed_ply(magnitude: int, wdl: int) -> int:
 
 class _ProbeValues(NamedTuple):
     """One position's resolved WDL — the only metric every probeable
-    position has — plus whichever of DTC, DTM, and DTM50 the loaded
+    position has — plus whichever of DTZ, DTM, and DTM50 the loaded
     tablebase separately has for it. A material can ship any subset of the
-    three on top of WDL (e.g. WDL+DTC without DTM/DTM50 because a large
+    three on top of WDL (e.g. WDL+DTZ without DTM/DTM50 because a large
     piece count's DTM50 table is impractically large to generate);
-    has_dtc/has_dtm/has_dtm50 report which of them this exact position
-    actually has. dtc/dtm/dtm50/dtm50_wdl are 0/0/0/None when the matching
+    has_dtz/has_dtm/has_dtm50 report which of them this exact position
+    actually has. dtz/dtm/dtm50/dtm50_wdl are 0/0/0/None when the matching
     has_* flag is False."""
     wdl:       int
-    has_dtc:   bool
-    dtc:       int
+    has_dtz:   bool
+    dtz:       int
     has_dtm:   bool
     dtm:       int
     has_dtm50: bool
@@ -575,7 +575,7 @@ class _ProbeValues(NamedTuple):
 
 
 def _probe_board(board: chess.Board) -> _ProbeValues | None:
-    # A single combined probe() call computes WDL + DTC + DTM + DTM50 together
+    # A single combined probe() call computes WDL + DTZ + DTM + DTM50 together
     # internally no matter what you ask for, so building all four signed
     # values off one ProbeResult's raw fields (via _signed_wdl/_signed_ply
     # above) avoids calling get_wdl()/get_dtz()/get_dtm()/probe_dtm50()
@@ -584,8 +584,8 @@ def _probe_board(board: chess.Board) -> _ProbeValues | None:
     # _probe_board runs per-position on every worker thread in the pool below.
     #
     # WDL is the only metric required — a position whose WDL this app can't
-    # resolve isn't probeable at all, and returns None. DTC, DTM, and DTM50
-    # are each independently optional past that baseline; has_dtc/has_dtm/
+    # resolve isn't probeable at all, and returns None. DTZ, DTM, and DTM50
+    # are each independently optional past that baseline; has_dtz/has_dtm/
     # has_dtm50 carry whichever of the three the loaded tables actually
     # answered for this position, and callers report the others regardless
     # of what those say.
@@ -597,8 +597,8 @@ def _probe_board(board: chess.Board) -> _ProbeValues | None:
         return None
     return _ProbeValues(
         wdl=wdl,
-        has_dtc=r.has_dtc,
-        dtc=abs(_signed_ply(r.dtc, r.wdl)) if r.has_dtc else 0,
+        has_dtz=r.has_dtz,
+        dtz=abs(_signed_ply(r.dtz, r.wdl)) if r.has_dtz else 0,
         has_dtm=r.has_dtm,
         dtm=abs(_signed_ply(r.dtm, r.wdl)) if r.has_dtm else 0,
         has_dtm50=r.has_dtm50,
@@ -683,7 +683,7 @@ def _probe_fen(fen: str) -> _ProbeValues | None:
 def _apply_sign(magnitude: int, sign_wdl: int) -> int:
     """Gives an unsigned ply magnitude the sign implied by a signed WDL
     value: positive for a winning sign_wdl, negative for a losing one,
-    zero for a draw. Shared by every DTC/DTM/DTM50 assembly step in
+    zero for a draw. Shared by every DTZ/DTM/DTM50 assembly step in
     evaluate_all_moves below, so the three metrics can't drift apart on
     how a magnitude gets its sign."""
     if sign_wdl > 0:
@@ -776,10 +776,10 @@ def evaluate_all_moves(
     dtm50_rows: list[tuple] = []
 
     # Sort key/entry pair used whenever this material's table for a metric
-    # (DTC or DTM) doesn't cover a move: WDL alone still places the move in
+    # (DTZ or DTM) doesn't cover a move: WDL alone still places the move in
     # the right win/draw/loss bucket (see _capped_wdl), just without a
     # distance to show inside that bucket, so it's ranked alongside where
-    # its DTC counterpart would sort rather than dumped in a separate pile.
+    # its DTZ counterpart would sort rather than dumped in a separate pile.
     def _wdl_only(my_wdl: int, move_is_mate: bool, draw_reason: str | None) -> tuple[tuple, MoveEntry]:
         wdl_bucket = _capped_wdl(my_wdl, root_wdl)
         key = (_outcome_rank(wdl_bucket), 0, san)
@@ -793,13 +793,13 @@ def evaluate_all_moves(
 
         if move_is_mate:
             opp_wdl = opp_dtm50_wdl = -2
-            opp_dtc = opp_dtm = opp_dtm50 = 0
-            opp_has_dtc = opp_has_dtm = opp_has_dtm50 = True
+            opp_dtz = opp_dtm = opp_dtm50 = 0
+            opp_has_dtz = opp_has_dtm = opp_has_dtm50 = True
 
         elif draw_reason:
             opp_wdl = opp_dtm50_wdl = 0
-            opp_dtc = opp_dtm = opp_dtm50 = 0
-            opp_has_dtc = opp_has_dtm = opp_has_dtm50 = True
+            opp_dtz = opp_dtm = opp_dtm50 = 0
+            opp_has_dtz = opp_has_dtm = opp_has_dtm50 = True
 
         else:
             probe_result = probe_cache.get(child_fen)
@@ -815,36 +815,36 @@ def evaluate_all_moves(
                 dtm50_rows.append((stub_key, stub))
                 continue
             opp_wdl = probe_result.wdl
-            opp_has_dtc, opp_dtc = probe_result.has_dtc, probe_result.dtc
+            opp_has_dtz, opp_dtz = probe_result.has_dtz, probe_result.dtz
             opp_has_dtm, opp_dtm = probe_result.has_dtm, probe_result.dtm
             opp_has_dtm50 = probe_result.has_dtm50
             opp_dtm50_wdl, opp_dtm50 = probe_result.dtm50_wdl, probe_result.dtm50
 
         my_wdl = -opp_wdl
 
-        # DTC row. Falls back to a WDL-only bucket when this material has no
-        # DTC table; that fallback also doubles as the DTM row's own bucket
-        # below when DTC is available but DTM isn't, so a move's win/draw/
+        # DTZ row. Falls back to a WDL-only bucket when this material has no
+        # DTZ table; that fallback also doubles as the DTM row's own bucket
+        # below when DTZ is available but DTM isn't, so a move's win/draw/
         # loss classification never depends on which of the two happens to
         # be missing.
-        if opp_has_dtc:
-            my_dtc = _apply_sign(opp_dtc, my_wdl)
+        if opp_has_dtz:
+            my_dtz = _apply_sign(opp_dtz, my_wdl)
             # If this move is itself a zeroing move (capture/pawn-push/
-            # promotion), it IS the conversion, so its DTC is 1 ply — not
+            # promotion), it IS the zeroing move, so its DTZ is 1 ply — not
             # 1 + the child position's own distance to *its* next
-            # conversion, which is what feeding my_dtc straight into
+            # zeroing move, which is what feeding my_dtz straight into
             # _effective_distance would compute (double-counting a second
-            # conversion event nobody asked for). _effective_distance
+            # zeroing event nobody asked for). _effective_distance
             # already has a branch for exactly this ("no further distance
             # needed, the move itself resolves it"), so just call it with
             # raw_distance=0 instead of reimplementing that branch here.
-            eff_dtc = (_effective_distance(my_wdl, 0) if move_is_zeroing
-                       else _effective_distance(my_wdl, my_dtc))
-            eff_wdl = _effective_move_wdl(my_wdl, root_wdl, eff_dtc)
+            eff_dtz = (_effective_distance(my_wdl, 0) if move_is_zeroing
+                       else _effective_distance(my_wdl, my_dtz))
+            eff_wdl = _effective_move_wdl(my_wdl, root_wdl, eff_dtz)
             outcome = _outcome_label(eff_wdl)
-            dtz_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtc), san)
+            dtz_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtz), san)
             dtz_rows.append((dtz_key, {
-                "san": san, "plies": abs(eff_dtc), "is_mate": move_is_mate, "available": True,
+                "san": san, "plies": abs(eff_dtz), "is_mate": move_is_mate, "available": True,
                 "outcome": outcome, "child_fen": child_fen, "draw_reason": draw_reason,
             }))
         else:
@@ -855,15 +855,15 @@ def evaluate_all_moves(
         if opp_has_dtm:
             my_dtm = _apply_sign(opp_dtm, my_wdl)
             eff_dtm = _effective_distance(my_wdl, my_dtm)
-            if opp_has_dtc:
-                # DTC and DTM share the same win/cursed-win (loss/blessed-
-                # loss) bucket and label as the DTC row above, since that
-                # status is a single fact about eff_dtc and root_wdl rather
+            if opp_has_dtz:
+                # DTZ and DTM share the same win/cursed-win (loss/blessed-
+                # loss) bucket and label as the DTZ row above, since that
+                # status is a single fact about eff_dtz and root_wdl rather
                 # than a separate one per metric.
                 dtm_key = (_outcome_rank(eff_wdl), _ply_rank(eff_wdl, eff_dtm), san)
                 dtm_outcome = outcome
             else:
-                # No DTC on this material to derive a shared bucket from —
+                # No DTZ on this material to derive a shared bucket from —
                 # fall back to DTM's own distance for the win/cursed-win
                 # split instead.
                 dtm_eff_wdl = _effective_move_wdl(my_wdl, root_wdl, eff_dtm)
@@ -877,7 +877,7 @@ def evaluate_all_moves(
             key, entry = _wdl_only(my_wdl, move_is_mate, draw_reason)
             dtm_rows.append((key, entry))
 
-        # DTM50 row. Unlike DTC/DTM, DTM50 carries its own rule50-aware WDL
+        # DTM50 row. Unlike DTZ/DTM, DTM50 carries its own rule50-aware WDL
         # (dtm50_wdl) that can genuinely differ from the main WDL, so there's
         # no sound way to guess its outcome from the main WDL when it's
         # missing — the row is flatly "not_available" rather than a WDL-only
@@ -1030,15 +1030,15 @@ def _evaluate_fen_impl(fen: str) -> str:
     }
 
     # dtz/dtm/dtm50 are the root's own metrics, each independently
-    # unavailable when this material has no DTC/DTM/DTM50 table — see
+    # unavailable when this material has no DTZ/DTM/DTM50 table — see
     # _probe_board. The paired *_available flag is the authoritative signal
     # for that; the value fields fall back to null/[null, null] rather than
     # being omitted, so every response has the same fixed shape regardless
     # of coverage.
     json_str = json.dumps({
         "wdl":              root.wdl,
-        "dtz":              root.dtc if root.has_dtc else None,
-        "dtz_available":    root.has_dtc,
+        "dtz":              root.dtz if root.has_dtz else None,
+        "dtz_available":    root.has_dtz,
         "dtm":              root.dtm if root.has_dtm else None,
         "dtm_available":    root.has_dtm,
         "dtm50":            [root.dtm50_wdl, root.dtm50] if root.has_dtm50 else [None, None],

@@ -4,11 +4,11 @@ fetching only the bytes each probe touches.
 How this differs from remote_fallback.py
 ----------------------------------------
 remote_fallback.py downloads a whole table file on first touch and hands
-the standard ``WDLFile``/``DTCFile``/``DTMFile``/``DTM50File`` a local
+the standard ``WDLFile``/``DTZFile``/``DTMFile``/``DTM50File`` a local
 path. This module instead uses those same classes' ability to read
 through any buffer-shaped object: ``chess.chesstb._TableFile._open_source``
 is the documented seam for it, and ``chess.chesstb.Tablebase.WDL_FILE`` /
-``.DTC_FILE`` / ``.DTM_FILE`` / ``.DTM50_FILE`` name the classes carrying
+``.DTZ_FILE`` / ``.DTM_FILE`` / ``.DTM50_FILE`` name the classes carrying
 the override, so this module never has to reimplement the
 look-once-then-cache logic in ``_open_wdl`` and friends.
 
@@ -41,7 +41,7 @@ are kept; config.py's ``REMOTE_MODE`` chooses.
 Per-material opening
 ---------------------
 ``chess.chesstb.Tablebase`` normally guards each *kind*'s first-open dance
-(``_open_wdl``/``_open_dtc``/``_open_dtm``/``_open_dtm50``) with one lock
+(``_open_wdl``/``_open_dtz``/``_open_dtm``/``_open_dtm50``) with one lock
 per kind, shared by every material of that kind -- cheap to hold for a
 local ``os.path.exists()``, but this class's ``_find`` does a real network
 round trip underneath it. So ``_RemoteTablebase`` overrides all four
@@ -92,7 +92,7 @@ def seam_available() -> bool:
     """
     return (
         hasattr(chesstb.Tablebase, "WDL_FILE")
-        and hasattr(chesstb.Tablebase, "DTC_FILE")
+        and hasattr(chesstb.Tablebase, "DTZ_FILE")
         and hasattr(chesstb.Tablebase, "DTM_FILE")
         and hasattr(chesstb.Tablebase, "DTM50_FILE")
         and hasattr(chesstb._TableFile, "_open_source")
@@ -119,7 +119,7 @@ class _RemoteWDLFile(_RemoteSourced, chesstb.WDLFile):
     pass
 
 
-class _RemoteDTCFile(_RemoteSourced, chesstb.DTCFile):
+class _RemoteDTZFile(_RemoteSourced, chesstb.DTZFile):
     pass
 
 
@@ -140,7 +140,7 @@ class _RemoteTablebase(chesstb.Tablebase):
     """
 
     WDL_FILE = _RemoteWDLFile
-    DTC_FILE = _RemoteDTCFile
+    DTZ_FILE = _RemoteDTZFile
     DTM_FILE = _RemoteDTMFile
     DTM50_FILE = _RemoteDTM50File
 
@@ -239,8 +239,8 @@ class _RemoteTablebase(chesstb.Tablebase):
     def _open_wdl(self, cfg: Any) -> Any:
         return self._open_any("wdl", self._wdl_cache, self.WDL_FILE, cfg)
 
-    def _open_dtc(self, cfg: Any) -> Any:
-        return self._open_any("dtc", self._dtc_cache, self.DTC_FILE, cfg)
+    def _open_dtz(self, cfg: Any) -> Any:
+        return self._open_any("dtz", self._dtz_cache, self.DTZ_FILE, cfg)
 
     def _open_dtm(self, cfg: Any) -> Any:
         return self._open_any("dtm", self._dtm_cache, self.DTM_FILE, cfg)

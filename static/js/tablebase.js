@@ -2,7 +2,7 @@
  * tablebase.js — /probe/stream SSE client and results renderer
  *
  * Owns the SSE client for /probe/stream and all rendering of the three
- * ranked move tables (DTC / DTM / DTM50), including:
+ * ranked move tables (DTZ / DTM / DTM50), including:
  *   - setResultHandler(fn) — callback after each successful probe, used by
  *     ui.js as its auto-play hook.
  *   - Prefetch on hover: warms the cache for the child position of a
@@ -272,7 +272,7 @@ const Tablebase = (() => {
             rankCell.textContent = i + 1;
             tr.appendChild(rankCell);
 
-            const dtzCells   = _createMoveCells(movesDtz[i]   || null, 'group-dtc',   false);
+            const dtzCells   = _createMoveCells(movesDtz[i]   || null, 'group-dtz',   false);
             const dtmCells   = _createMoveCells(movesDtm[i]   || null, 'group-dtm',   true);
             const dtm50Cells = _createMoveCells(movesDtm50[i] || null, 'group-dtm50', true);
 
@@ -306,7 +306,7 @@ const Tablebase = (() => {
         // correctly as "Draw" through the normal outcome formatting below.)
         const rootIsMate = maxRows === 0 && data.wdl !== 0;
 
-        // dtc/dtm fall back to _wdlToOutcome(data.wdl) even when
+        // dtz/dtm fall back to _wdlToOutcome(data.wdl) even when
         // *_available is false — WDL alone already distinguishes win/
         // cursed_win/draw/blessed_loss/loss, so it's the exact fallback
         // bucket for the root's own metric too, same as for a move (see
@@ -314,7 +314,7 @@ const Tablebase = (() => {
         // shown are gated on availability. dtm50 has no such fallback:
         // it carries its own rule50-aware WDL, unknowable from data.wdl,
         // so it's flatly "not_available" instead.
-        const dtcEntry = {
+        const dtzEntry = {
             san: _ROOT_LABEL, plies: data.dtz_available ? data.dtz : 0,
             outcome: _wdlToOutcome(data.wdl), available: data.dtz_available,
             is_mate: rootIsMate, draw_reason: data.draw_reason, child_fen: null,
@@ -332,7 +332,7 @@ const Tablebase = (() => {
         };
 
         const cells = [
-            ..._createMoveCells(dtcEntry,   'group-dtc',   false, false),
+            ..._createMoveCells(dtzEntry,   'group-dtz',   false, false),
             ..._createMoveCells(dtmEntry,   'group-dtm',   true,  false),
             ..._createMoveCells(dtm50Entry, 'group-dtm50', true,  false),
         ];
@@ -360,7 +360,7 @@ const Tablebase = (() => {
         const rankCell = document.createElement('td');
         rankCell.className = 'col-rank';
         row.appendChild(rankCell);
-        for (const groupClass of ['group-dtc', 'group-dtm', 'group-dtm50']) {
+        for (const groupClass of ['group-dtz', 'group-dtm', 'group-dtm50']) {
             for (const cell of _createMoveCells(null, groupClass, false)) row.appendChild(cell);
         }
     }
@@ -580,7 +580,7 @@ const Tablebase = (() => {
         const rows  = Math.max(dtz.length, dtm.length, dtm50.length);
         const lines = [];
         if (_lastFen) lines.push(`[FEN "${_lastFen}"]`);
-        lines.push('Rank,DTC Move,DTC Plies,DTC Outcome,DTM Move,DTM Plies,DTM Outcome,DTM50 Move,DTM50 Plies,DTM50 Outcome');
+        lines.push('Rank,DTZ Move,DTZ Plies,DTZ Outcome,DTM Move,DTM Plies,DTM Outcome,DTM50 Move,DTM50 Plies,DTM50 Outcome');
         // Root row — the position's own score, ahead of rank 1 and with no
         // rank number, mirroring the frozen row shown in the UI table.
         // Omitted when the "Show Root Row" setting is off, so the export

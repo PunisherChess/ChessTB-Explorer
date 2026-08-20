@@ -1172,7 +1172,7 @@ cg-board square.check {
     background: var(--surface-2);
 }
 
-/* ── Group header row (DTC / DTM / DTM50 labels) — centred ─────────── */
+/* ── Group header row (DTZ / DTM / DTM50 labels) — centred ─────────── */
 .moves-table thead tr.group-row th {
     font-size: 9.5px;
     font-weight: 700;
@@ -1193,7 +1193,7 @@ cg-board square.check {
     gap: 5px;
 }
 /* Left border on group boundaries (both rows share these classes) */
-.moves-table th.group-dtc  { border-left: 1px solid var(--border-2); }
+.moves-table th.group-dtz  { border-left: 1px solid var(--border-2); }
 .moves-table th.group-dtm  { border-left: 1px solid var(--border-2); }
 .moves-table th.group-dtm50{ border-left: 1px solid var(--border-2); }
 
@@ -1210,7 +1210,7 @@ cg-board square.check {
     white-space: nowrap;
 }
 /* Override group-boundary padding for col-row: add left spacing after border */
-.moves-table thead tr.col-row th.group-dtc  { padding-left: 14px; }
+.moves-table thead tr.col-row th.group-dtz  { padding-left: 14px; }
 .moves-table thead tr.col-row th.group-dtm  { padding-left: 10px; }
 .moves-table thead tr.col-row th.group-dtm50{ padding-left: 10px; }
 /* Score column right-aligned */
@@ -1272,7 +1272,7 @@ cg-board square.check {
 }
 
 /* Group boundary borders on td too */
-.moves-table td.group-dtc  { border-left: 1px solid var(--border-2); padding-left: 14px; }
+.moves-table td.group-dtz  { border-left: 1px solid var(--border-2); padding-left: 14px; }
 .moves-table td.group-dtm  { border-left: 1px solid var(--border-2); padding-left: 10px; }
 .moves-table td.group-dtm50{ border-left: 1px solid var(--border-2); padding-left: 10px; }
 

@@ -5,7 +5,7 @@ requirements.txt) that app.py loads directly.
 Why this exists
 ----------------
 ``chess.chesstb.Tablebase`` only ever reads from a local filesystem path:
-``WDLFile``/``DTCFile``/``DTM50File._load()`` always do a plain
+``WDLFile``/``DTZFile``/``DTM50File._load()`` always do a plain
 ``open(path, "rb").read()`` against a real filesystem path, and
 ``Tablebase._find()`` always resolves candidates with ``os.path.exists()``.
 Neither can be pointed at a URL as they stand, and this module doesn't (and
@@ -16,7 +16,7 @@ override only the file-*resolution* step (``_find``): the first time a
 probe touches a given material, the corresponding remote table file is
 fetched in full and written to a local per-process cache directory, and
 the resulting local path is handed unchanged to the standard, untouched
-``WDLFile``/``DTCFile``/``DTM50File`` constructors -- which run completely
+``WDLFile``/``DTZFile``/``DTM50File`` constructors -- which run completely
 unaware they're not reading from a hand-picked local directory. Every
 other behaviour (probing, index maths, block decoding, ``MissingTableError``,
 the ``WIN``/``DRAW``/... constants, ``ProbeResult``) is the standard
@@ -103,7 +103,7 @@ class _RemoteDiskCache:
     holding an OS-level file descriptor already open on it, but on POSIX
     an unlinked-but-open file stays readable to that descriptor until
     it's closed, so an in-flight ``open().read()`` (the only thing the
-    standard ``WDLFile``/``DTCFile``/``DTM50File`` ever do) is unaffected
+    standard ``WDLFile``/``DTZFile``/``DTM50File`` ever do) is unaffected
     either way.
     """
 
@@ -197,7 +197,7 @@ class _RemoteCachingTablebase(chesstb.Tablebase):
         self._size_cache: dict[str, Optional[int]] = {}
         self._size_lock = threading.Lock()
         # Base Tablebase.__init__ calls self.add_directory(base_url), which
-        # joins `base_url` onto "wdl"/"dtc"/"dtm50" with os.path.join and
+        # joins `base_url` onto "wdl"/"dtz"/"dtm50" with os.path.join and
         # stashes the (unused here) results in self.dirs -- harmless, and
         # left as-is rather than overridden, since _find below never reads
         # self.dirs for a remote table: it resolves directly against

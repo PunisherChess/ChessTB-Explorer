@@ -418,7 +418,7 @@ const UI = (() => {
     }
 
     // ── Auto-play ─────────────────────────────────────────────────────────────
-    // One button per metric (DTC / DTM / DTM50, rendered below each column
+    // One button per metric (DTZ / DTM / DTM50, rendered below each column
     // group in the moves table); each plays that metric's top-ranked move on
     // a timer. Only one metric can be running at a time — starting one stops
     // any other that was active.
@@ -434,7 +434,7 @@ const UI = (() => {
     // the two takes longer (i.e. max(pacing window, probe latency)), not
     // their sum.
     const _METRIC_CONFIG = {
-        dtc:   { dataKey: 'moves_dtz',   label: 'DTC'   },
+        dtz:   { dataKey: 'moves_dtz',   label: 'DTZ'   },
         dtm:   { dataKey: 'moves_dtm',   label: 'DTM'   },
         dtm50: { dataKey: 'moves_dtm50', label: 'DTM50' },
     };
@@ -480,7 +480,7 @@ const UI = (() => {
         try { localStorage.setItem(_LS_AUTOPLAY_DELAY_MS, String(_autoPlayDelayValueMs)); } catch (_) { /* storage unavailable */ }
     }
 
-    let _autoPlayMetric = null;   // 'dtc' | 'dtm' | 'dtm50' | null
+    let _autoPlayMetric = null;   // 'dtz' | 'dtm' | 'dtm50' | null
     let _autoPlayTimer  = null;
     // Guards onPositionChange()'s manual-navigation detection — true only
     // for the duration of auto-play's own Board.playMove() call.
@@ -644,19 +644,19 @@ const UI = (() => {
 
     // Disable a metric's auto-play button when either this material has no
     // table for that metric, or its root outcome is already a draw — no
-    // "best move" is worth auto-playing towards either way. DTC/DTM share
+    // "best move" is worth auto-playing towards either way. DTZ/DTM share
     // the root WDL for the draw check (they ignore the 50-move rule); DTM50
     // uses its own 50-move-rule-aware root WDL and its own dtm50_available
-    // flag — neither ever derives from DTC/DTM's metrics or from the main
+    // flag — neither ever derives from DTZ/DTM's metrics or from the main
     // WDL, since DTM50 doesn't use either.
     function _updateAutoplayAvailability(data) {
         const availableByMetric = {
-            dtc:   data?.dtz_available,
+            dtz:   data?.dtz_available,
             dtm:   data?.dtm_available,
             dtm50: data?.dtm50_available,
         };
         const rootWdlByMetric = {
-            dtc:   data?.wdl,
+            dtz:   data?.wdl,
             dtm:   data?.wdl,
             dtm50: Array.isArray(data?.dtm50) ? data.dtm50[0] : null,
         };
@@ -683,14 +683,14 @@ const UI = (() => {
     // missing metric gracefully by simply not drawing that arrow.
     function _bestMovesForArrows(data) {
         return {
-            dtc:   (data?.moves_dtz   || [])[0] || null,
+            dtz:   (data?.moves_dtz   || [])[0] || null,
             dtm:   (data?.moves_dtm   || [])[0] || null,
             dtm50: (data?.moves_dtm50 || [])[0] || null,
         };
     }
 
     Tablebase.setResultHandler(data => {
-        // Draw DTC / DTM / DTM50 best-move arrows
+        // Draw DTZ / DTM / DTM50 best-move arrows
         Board.drawArrows(_bestMovesForArrows(data));
         _updateAutoplayAvailability(data);
         _setInputsReady(true);   // first (or any) successful probe → ready
