@@ -90,7 +90,7 @@ EVALUATE_CACHE_SIZE = 4096
 PROBE_CACHE_SIZE = 16384
 
 # Size (in bytes) of chess.chesstb's own internal cache of decoded/
-# decompressed tablebase blocks, shared across the WDL/DTC/DTM50 tables.
+# decompressed tablebase blocks, shared across the WDL/DTZ/DTM50 tables.
 # 64 MiB is chess.chesstb's own default. Raising this reduces repeated
 # disk reads + decompression across a session at the cost of RAM — worth
 # raising on a machine with RAM to spare, especially when running probes

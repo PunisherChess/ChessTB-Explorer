@@ -268,13 +268,13 @@
           <caption class="sr-only">
             When Show Root Row is enabled in Settings, the current
             position's own score is shown first, followed by legal moves
-            ranked by Distance to Conversion, Distance to Mate, and
+            ranked by Distance to Zeroing, Distance to Mate, and
             Distance to Mate with the 50-move rule
           </caption>
           <!-- Fixed % widths (paired with table-layout:fixed in main.css) so
                column boundaries — and therefore the auto-play buttons in the
                header — never shift as score text length changes during
-               auto-play. Group totals: rank 3% · DTC 27% · DTM 35% · DTM50 35%. -->
+               auto-play. Group totals: rank 3% · DTZ 27% · DTM 35% · DTM50 35%. -->
           <colgroup>
             <col style="width:3%">
             <col style="width:13%">
@@ -287,11 +287,11 @@
           <thead>
             <tr class="group-row">
               <th></th>
-              <th class="group-dtc" colspan="2">
+              <th class="group-dtz" colspan="2">
                 <span class="group-row-inner">
-                  <span class="group-label">DTC</span>
-                  <button id="autoplay-btn-dtc" class="btn btn--col-autoplay"
-                          title="Auto-play best DTC move" aria-label="Auto-play best DTC move">
+                  <span class="group-label">DTZ</span>
+                  <button id="autoplay-btn-dtz" class="btn btn--col-autoplay"
+                          title="Auto-play best DTZ move" aria-label="Auto-play best DTZ move">
                     <svg class="autoplay-icon autoplay-icon--play" viewBox="0 0 12 12" aria-hidden="true">
                       <path d="M3 2.1 L9.6 6 L3 9.9 Z"/>
                     </svg>
@@ -332,7 +332,7 @@
             </tr>
             <tr class="col-row">
               <th class="col-rank"              scope="col" aria-label="Rank">#</th>
-              <th class="group-dtc   col-move"  scope="col">Move</th>
+              <th class="group-dtz   col-move"  scope="col">Move</th>
               <th class="col-score"             scope="col">Score</th>
               <th class="group-dtm   col-move"  scope="col">Move</th>
               <th class="col-score"             scope="col">Score</th>
@@ -353,7 +353,7 @@
                  tablebase.js. -->
             <tr id="root-row" class="root-row">
               <td class="col-rank"></td>
-              <td class="group-dtc col-move is-empty-cell">—</td>
+              <td class="group-dtz col-move is-empty-cell">—</td>
               <td class="col-score is-empty-cell">—</td>
               <td class="group-dtm col-move is-empty-cell">—</td>
               <td class="col-score is-empty-cell">—</td>

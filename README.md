@@ -2,7 +2,7 @@
 
 A local, single-page web application for exploring **ChessTB** chess endgame
 tablebases. Paste or build any position on an interactive board and
-instantly see every legal move ranked by **Distance to Conversion (DTC)**,
+instantly see every legal move ranked by **Distance to Zeroing (DTZ)**,
 **Distance to Mate (DTM)**, and **DTM under the 50-move rule (DTM50)** —
 straight from the tablebase, with no chess engine involved.
 
@@ -41,7 +41,7 @@ this project to anyone else.
   is remembered locally across visits. Auto-play also engages Lock for
   the duration of a run (unless already locked by hand), and disables the
   padlock button until the run stops.
-- **Three ranked move tables side by side** — DTC, DTM, and DTM50 columns,
+- **Three ranked move tables side by side** — DTZ, DTM, and DTM50 columns,
   each independently sorted best-move-first, with:
   - score text colour-coded by outcome (win / cursed win / draw /
     blessed loss / loss)
@@ -54,7 +54,7 @@ this project to anyone else.
     position's own score for each metric as a reference point — toggled
     from the settings panel (**Show Root Row**, off by default) and
     persisted locally
-- **Best-move arrows** — the top DTC, DTM, and DTM50 moves are drawn as
+- **Best-move arrows** — the top DTZ, DTM, and DTM50 moves are drawn as
   colour-coded arrows directly on the board.
 - **Auto-play** — automatically plays the best move for any of the three
   metrics on a timer, so you can watch a line play out. The per-move delay
@@ -219,7 +219,7 @@ browsable at:
 https://huggingface.co/buckets/noobpwnftw/chesstb
 ```
 
-with `wdl/`, `dtc/`, and `dtm50/` subdirectories laid out exactly like the
+with `wdl/`, `dtz/`, and `dtm50/` subdirectories laid out exactly like the
 local directory structure below. Buckets aren't versioned the way
 regular Hub repos are, so there's no branch segment — the raw file bytes
 for that same folder are served from `/resolve`,
@@ -317,7 +317,7 @@ explaining what it does. The table below is the complete reference.
 | `PROBE_TIMEOUT_SECS`        | `30`              | Wall-clock timeout for a batch of parallel child probes. Also bounds how long a request waits on another thread's in-flight probe of the same FEN before giving up with a retryable `probe_timeout` error. |
 | `EVALUATE_CACHE_SIZE`       | `4096`            | Max entries in the root-FEN result cache (full JSON responses). |
 | `PROBE_CACHE_SIZE`          | `16384`           | Max entries in the child-position probe cache (raw WDL/DTZ/DTM tuples). |
-| `BLOCK_CACHE_BYTES`         | `67108864` (64 MiB) | Size, in bytes, of `chesstb`'s own internal cache of decoded/decompressed tablebase blocks (shared across the WDL/DTC/DTM50 tables). Raising this trades RAM for fewer repeated disk reads/HTTP fetches + decompressions across a session — most worthwhile when `PROBE_PARALLEL_THRESHOLD` is set high enough that probing runs mostly serially. |
+| `BLOCK_CACHE_BYTES`         | `67108864` (64 MiB) | Size, in bytes, of `chesstb`'s own internal cache of decoded/decompressed tablebase blocks (shared across the WDL/DTZ/DTM50 tables). Raising this trades RAM for fewer repeated disk reads/HTTP fetches + decompressions across a session — most worthwhile when `PROBE_PARALLEL_THRESHOLD` is set high enough that probing runs mostly serially. |
 | `REMOTE_MODE`               | `"direct"`        | **Remote `TABLEBASE_PATH` only.** `"direct"` probes the remote tables in place over byte ranges (nothing written to disk); `"download"` fetches each table in full on first touch and caches it on local disk. Falls back to `"download"` if the installed `chess.chesstb` has no table-source seam. See [Getting the tablebase files](#getting-the-tablebase-files). |
 | `REMOTE_PAGE_CACHE_BYTES`   | `134217728` (128 MiB) | **Remote `TABLEBASE_PATH` only.** Soft budget, in bytes, shared across every remote table opened this session: the in-memory page cache in `"direct"` mode, the on-disk cache of whole downloaded files in `"download"` mode. See [Getting the tablebase files](#getting-the-tablebase-files). |
 | `REMOTE_PAGE_SIZE_BYTES`    | `262144` (256 KiB) | **Remote `TABLEBASE_PATH` only.** Size, in bytes, of one page. In `"direct"` mode this is the granularity of every fetch, so it trades over-fetching against round trips per probe; in `"download"` mode it is only the chunk size used while streaming a full file down. |
@@ -391,7 +391,7 @@ python app.py
   play it, or drag a piece on the board through a legal move.
 - **Navigate history** — **Back**/**Forward** buttons or `←`/`→`, or click
   any move in the PGN panel to jump straight to that point in the line.
-- **Auto-play** — click the ▶ button above the DTC, DTM, or DTM50 columns
+- **Auto-play** — click the ▶ button above the DTZ, DTM, or DTM50 columns
   to have the app play that metric's best move on a timer (delay set by
   **Autoplay Delay** in settings, 1.25s by default); click again (now
   showing ■) to stop. Any manual navigation stops auto-play.
@@ -399,7 +399,7 @@ python app.py
   paste PGN text and jump to any parsed move; **Copy** copies the current
   line as PGN with standard headers.
 - **Export the move table** — the **CSV** button downloads the current
-  DTC/DTM/DTM50 rankings as a CSV file.
+  DTZ/DTM/DTM50 rankings as a CSV file.
 - **Share a position** — the URL updates live with `#fen=...`; sending
   that link reproduces the exact position.
 - **Change the look** — the ⚙ button in the header opens board and

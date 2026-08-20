@@ -4,7 +4,7 @@ info:
   version: "1.0.0"
   description: |
     Chess endgame tablebase probe API.
-    Submit a FEN position and receive ranked move lists for Distance to Conversion (DTC),
+    Submit a FEN position and receive ranked move lists for Distance to Zeroing (DTZ),
     Distance to Mate (DTM), and DTM under the 50-move rule (DTM50).
 
 paths:
@@ -153,9 +153,9 @@ components:
           type: boolean
           description: >-
             False when this material's tablebase has no table for this
-            entry's metric (DTC, DTM, or DTM50 — WDL is always available).
+            entry's metric (DTZ, DTM, or DTM50 — WDL is always available).
             plies is 0 in that case; outcome still reports a WDL-derived
-            win/cursed_win/draw/blessed_loss/loss bucket for DTC/DTM rows,
+            win/cursed_win/draw/blessed_loss/loss bucket for DTZ/DTM rows,
             but is flatly not_available for a DTM50 row, since DTM50's own
             rule50-aware WDL can't be derived from the main WDL.
         child_fen:
@@ -188,11 +188,11 @@ components:
           type: integer
           nullable: true
           description: >-
-            Distance to Zero (distance to conversion) in plies; null when
+            Distance to Zeroing (DTZ) in plies; null when
             dtz_available is false
         dtz_available:
           type: boolean
-          description: False when this material's tablebase has no DTC table
+          description: False when this material's tablebase has no DTZ table
         dtm:
           type: integer
           nullable: true
@@ -222,7 +222,7 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MoveEntry"
-          description: All legal moves ranked by Distance to Conversion (best first)
+          description: All legal moves ranked by Distance to Zeroing (best first)
         moves_dtm:
           type: array
           items:

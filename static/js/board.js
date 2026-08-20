@@ -9,7 +9,7 @@
  *     undo/redo FEN stack (_history/_future) sits alongside it as a
  *     fallback for Back/Forward once navigation walks off the tree (e.g.
  *     past a board edit that started a fresh one).
- *   - Best-move arrows for DTC/DTM/DTM50, drawn via chessground's native
+ *   - Best-move arrows for DTZ/DTM/DTM50, drawn via chessground's native
  *     drawable.autoShapes.
  *   - Click-to-place editing: click a spare piece, then click a square to
  *     place it. Drag-from-tray is also supported (chessground's
@@ -372,10 +372,10 @@ const Board = (() => {
         if (_onPositionChange) _onPositionChange(_game.fen(), false);
     }
 
-    // ── Best-move arrows (DTC / DTM / DTM50) ─────────────────────────────────
+    // ── Best-move arrows (DTZ / DTM / DTM50) ─────────────────────────────────
     // Native chessground feature (drawable.autoShapes) — square keys, not
     // pixel coordinates, so chessground handles orientation/resizing itself.
-    // bestMoves: { dtc: entry|null, dtm: entry|null, dtm50: entry|null } —
+    // bestMoves: { dtz: entry|null, dtm: entry|null, dtm50: entry|null } —
     // the top-ranked move for each metric (any of which may be missing, e.g.
     // for a terminal or not-yet-probed position).
     function drawArrows(bestMoves) {
@@ -386,7 +386,7 @@ const Board = (() => {
         legalVerbose.forEach(m => { sanMap[m.san] = m; });
 
         const shapes = [];
-        ['dtc', 'dtm', 'dtm50'].forEach(metric => {
+        ['dtz', 'dtm', 'dtm50'].forEach(metric => {
             const entry = bestMoves[metric];
             if (!entry) return;
             const moveObj = sanMap[entry.san];
@@ -581,7 +581,7 @@ const Board = (() => {
                 enabled: true,
                 visible: true,
                 brushes: {
-                    dtc:   { key: 'dtc',   color: '#2451c4', opacity: 0.40, lineWidth: 10 },
+                    dtz:   { key: 'dtz',   color: '#2451c4', opacity: 0.40, lineWidth: 10 },
                     dtm:   { key: 'dtm',   color: '#8b93a1', opacity: 0.40, lineWidth: 10 },
                     dtm50: { key: 'dtm50', color: '#e1453a', opacity: 0.40, lineWidth: 10 },
                 },
