@@ -973,6 +973,14 @@ cg-board square.check {
 }
 .spare-tray--black { border-bottom: 2px solid var(--tray-border); }
 .spare-tray--white { border-top: 2px solid var(--tray-border); }
+.board-wrap-inner.orientation-black .spare-tray--black {
+    border-bottom: none;
+    border-top: 2px solid var(--tray-border);
+}
+.board-wrap-inner.orientation-black .spare-tray--white {
+    border-top: none;
+    border-bottom: 2px solid var(--tray-border);
+}
 .spare-piece {
     width: 45px;
     height: 45px;
